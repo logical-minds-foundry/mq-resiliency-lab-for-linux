@@ -1,0 +1,2000 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Reproducible nested-virtualization lab for IBM MQ HA and DR resiliency on Linux">
+      
+      
+      
+      
+        <link rel="prev" href="../mq-json-logging-guide/">
+      
+      
+        <link rel="next" href="../mq-metrics-config-guide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Instrumentation event monitoring - MQ Resiliency Lab for Linux</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ibm-mq-instrumentation-event-monitoring-events-as-json-via-amqsevt" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-header__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MQ Resiliency Lab for Linux
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Instrumentation event monitoring
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Releases
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../methodology/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Methodology
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../operate/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operate & Observe
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../reference/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../develop/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Develop the lab
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../design-and-specs/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Design & Specs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-nav__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    MQ Resiliency Lab for Linux
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Releases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../releases/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Release Notes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../methodology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methodology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operate/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate & Observe
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operate & Observe
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/guest-components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide-standard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authoring standard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../_template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-json-logging-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON diagnostic logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instrumentation event monitoring
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instrumentation event monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-metrics-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics & monitoring configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-tcp-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TCP configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-authorization-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & access control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nativeha-log-lifecycle-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native HA log lifecycle (runbook)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../develop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Develop the lab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design-and-specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design & Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="ibm-mq-instrumentation-event-monitoring-events-as-json-via-amqsevt">IBM MQ instrumentation event monitoring — events as JSON via <code>amqsevt</code><a class="headerlink" href="#ibm-mq-instrumentation-event-monitoring-events-as-json-via-amqsevt" title="Permanent link">&para;</a></h1>
+<ul>
+<li><strong>MQ version:</strong> 10.0.x (<code>amqsevt</code> with JSON output on MQ for Multiplatforms) —
+  re-pinned from 9.4 on 2026-10-15
+  (<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555">#1555</a>)</li>
+<li><strong>IBM Docs re-checked:</strong> 2026-10-15 against 10.0.x. One 10.0 difference is
+  folded in: <code>AUTHOREV</code> now covers successful as well as failed authorization
+  checks, scoped by the new <code>AUTHEVSC</code> attribute (Appendix A). The validation
+  record below is from MQ 9.4.5 and has not yet been re-run on 10.0.1.</li>
+<li><strong>Status:</strong> Adopted — the shared <code>mq-event-monitor</code> role configures this on
+  <strong>every</strong> queue manager across every stack (a de-facto standard, not a
+  single-QM proof of concept)</li>
+<li><strong>Last validated in lab:</strong> 2026-07-20 — the enable command (11 classes) and the
+  <code>amqsevt -o json_compact</code> collector mechanics were exercised on IBM MQ 9.4.5
+  (RHEL 9.6). See the companion reports in the repo:
+  <code>docs/reports/2026-07-28-mq-event-monitoring-to-file.md</code> and
+  <code>docs/reports/2026-07-20-mq-service-stdout-open-mode-evidence.md</code> (the
+  <code>STDOUT</code>-append proof). (The role is now deployed fleet-wide and the event
+  mechanics were verified per arm during the rollout; a full clean cold-rebuild of
+  some arms remains gated by separate lab-reliability issues, not by event
+  monitoring itself.)</li>
+<li><strong>Resilience validated:</strong> 2026-07-24 — the crash-restart collector (a supervising
+  wrapper in its own process group via <code>setsid</code>; a negative-PID group stop; <code>amqsevt</code>
+  restarted through the <code>MQRC_OBJECT_IN_USE</code> 2042 exclusive-handle reap window) passed
+  its full B-matrix on nativeha-ubuntu (<code>NHAUAPP</code>). The collector's <strong>sink is
+  selectable</strong> — <strong>syslog</strong> (journald; the lab default) or a <strong>file</strong> (<code>.json</code> data +
+  <code>.error</code> diagnostics) — resolved at provisioning time (<code>mq_event_sink</code>) so the
+  delivered script is <strong>single-purpose</strong>, and <strong>both variants are independently
+  tested</strong>. See the engineering report
+  <code>docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md</code> (the <em>why</em>), and the
+  vendor-neutral, install-as-written how-tos:
+  <code>docs/reports/2026-07-28-mq-event-monitor-resilient-service.md</code> (syslog) and
+  <code>docs/reports/2026-07-29-mq-event-monitor-file-sink-resilient.md</code> (file — clean stop,
+  2042 recovery, JSONL, and destructive drain all validated on <code>NHAUAPP</code>, 2026-07-29).</li>
+<li><strong>Working with the data:</strong> this guide covers <em>producing</em> the feed; two companion
+  repo reports cover <em>consuming</em> and <em>generating</em> it — the schema/consume reference
+  <code>docs/reports/2026-07-22-mq-event-json-working-with-the-data.md</code> (envelope, the
+  PCF→JSON key rule, the unordered/conditional-keys caveat, the syslog-fidelity
+  finding, and an annotated appendix of real captured events) and the deterministic
+  event-generation reference
+  <code>docs/reports/2026-07-26-mq-event-generation-lab-reference.md</code> (how to force one
+  event of each class). Real captured fixtures live under
+  <code>docs/reports/assets/110-mq-event-captures/</code>.</li>
+<li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a> — the
+  complementary <em>log</em> stream (why something happened) to this <em>event</em> stream
+  (what the queue manager did);
+  <a href="../nativeha-log-lifecycle-guide/">Native HA log lifecycle (runbook)</a> — reads the
+  recovery-log <strong><code>LOGGEREV</code></strong> events this guide enables, and is where the
+  linear/replicated-only constraint below is worked through in operational depth</li>
+</ul>
+<hr />
+<h2 id="1-purpose-audience">1. Purpose &amp; audience<a class="headerlink" href="#1-purpose-audience" title="Permanent link">&para;</a></h2>
+<p>A queue manager continuously emits <strong>instrumentation events</strong> — authorization
+failures, channel start/stop, queue depth high/full, configuration changes,
+commands issued, queue-manager start/stop, and more — as <strong>binary PCF messages</strong>
+on the <code>SYSTEM.ADMIN.*.EVENT</code> queues. Historically, reading them meant writing
+the program that parsed PCF.</p>
+<p>This guide removes that entirely. IBM ships a sample, <strong><code>amqsevt</code></strong>, that reads
+the event queues and formats each message — including a structured <strong>JSON</strong> mode.
+Enable the events you care about, run <code>amqsevt -o json_compact</code> as a managed
+collector, and you have an <strong>event-driven JSON feed with no parsing code</strong> — a thin
+translator, not an application. It is for anyone who wants MQ's own account of
+what a queue manager is doing as queryable JSON, alongside (not instead of) the
+diagnostic logs.</p>
+<h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
+<p>In scope: the MQ-side configuration that <strong>produces</strong> the JSON event feed —
+enabling event classes on the queue manager (<code>ALTER QMGR</code>), the per-queue
+thresholds that make performance events fire, and running <code>amqsevt -o json_compact</code>
+as a managed collector (an MQ <strong>service object</strong>).</p>
+<p>Out of scope: <strong>shipping, storing, or visualizing</strong> the JSON — that is your
+pipeline (a log collector, a store, a dashboard), the same boundary the
+<a href="../mq-json-logging-guide/">JSON logging guide</a> draws. This guide gets clean JSON
+onto your host's log stream; where it goes next is yours.</p>
+<p>Version floor: instrumentation events are core to MQ; the <code>amqsevt</code> sample and
+its <code>-o json</code> output are documented for <strong>MQ for Multiplatforms</strong>. Content is
+pinned to <strong>10.0.x</strong>. Enabling event classes takes effect immediately; the collector
+is a normal queue-manager service.</p>
+<h2 id="3-recommendation">3. Recommendation<a class="headerlink" href="#3-recommendation" title="Permanent link">&para;</a></h2>
+<p>Four decisions define a production-shaped event feed. Each is ranked with its
+compromise stated; your constraints may differ.</p>
+<ol>
+<li><strong>Use <code>amqsevt</code>, not a bespoke PCF reader.</strong> The sample ships prebuilt in the
+   MQ samples (<code>amqsevt</code>, with source <code>amqsevta.c</code>) and is included in the
+   redistributable client. It reads the event queues and emits JSON directly.
+   <em>Compromise:</em> it is a sample — you own its lifecycle as you deploy it — but it
+   removes all PCF-parsing code, which is the whole point.</li>
+<li><strong>Run it as an MQ service object (<code>CONTROL(QMGR)</code>), not an external client.</strong>
+   A <code>SERVICE</code> with <code>CONTROL(QMGR)</code> starts and stops with the queue manager and
+   runs in bindings mode, so under HA it <strong>travels with the queue manager</strong> to
+   wherever it is active — no floating-IP client connection, no "which instance
+   is live" logic. <em>Compromise:</em> one collector per queue manager, local to it;
+   a fleet-wide external collector is the alternative if you prefer central
+   deployment over travelling-with-the-QM (Appendix B).</li>
+<li><strong>Drain destructively (the default), not browse (<code>-b</code>).</strong> The collector <em>is</em>
+   the event consumer: a normal destructive get removes each event as it is read,
+   so the event queues never fill to <code>MAXDEPTH</code>. <em>Compromise:</em> a single consumer.
+   If more than one tool must read the same events, route events to a <strong>topic</strong>
+   (<code>amqsevt -t</code>) and fan out — do not browse, which leaves events on the queue
+   until it fills and MQ silently discards new ones.</li>
+<li><strong><code>CMDEV(NODISPLAY)</code>, not <code>CMDEV(ENABLED)</code>.</strong> Command events let you watch
+   administrative commands as they are issued — genuinely useful during a live
+   triage. <code>NODISPLAY</code> captures the mutating commands (<code>ALTER</code>, <code>DEFINE</code>,
+   <code>DELETE</code>, <code>STOP CHANNEL</code>, …) but excludes <code>DISPLAY</code>/inquire, so a polling
+   metrics collector does not drown the signal. <em>Compromise:</em> you lose visibility
+   of who is <em>reading</em> configuration; that is rarely what you want to watch.</li>
+</ol>
+<h2 id="4-how-to-configure-it">4. How to configure it<a class="headerlink" href="#4-how-to-configure-it" title="Permanent link">&para;</a></h2>
+<p><strong>Step 1 — enable the event classes on the queue manager.</strong> Turn on the classes
+you want with <code>ALTER QMGR</code>. To start broad and pare back once you know the
+volume, enable the full Multiplatforms set (Appendix A lists every class):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) +
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  INHIBTEV(ENABLED) LOCALEV(ENABLED) PERFMEV(ENABLED) REMOTEEV(ENABLED) +
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)
+</code></pre></div>
+<p><code>BRIDGEEV</code> is deliberately absent — it is z/OS-only (Appendix A). There is no
+<code>COMMEV</code> class. <strong><code>LOGGEREV</code> is also omitted:</strong> it is valid only on a
+<strong>linear-logging</strong> queue manager; on a circular-logging one MQ raises <code>AMQ8518E</code>
+and — because <code>ALTER QMGR</code> is atomic — <strong>rejects the whole statement</strong>, leaving no
+classes enabled. Add <code>LOGGEREV(ENABLED)</code> only where the queue manager uses linear
+logging (a Native HA queue manager's <strong>replicated</strong> log is linear-family and
+accepts it — see the
+<a href="../nativeha-log-lifecycle-guide/">Native HA log-lifecycle runbook</a>, which reads
+the resulting logger-event feed).</p>
+<p><strong>Step 2 — set the per-queue thresholds performance events need.</strong> <code>PERFMEV</code> at
+the queue-manager level emits nothing on its own; queue-depth events fire only
+where a queue carries thresholds. Set them on the application queues that matter:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>ALTER QLOCAL(YOUR.APP.QUEUE) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)
+</code></pre></div>
+<p><strong>Step 3 — define the collector as a queue-manager service.</strong> Define a <code>SERVICE</code>
+that runs <code>amqsevt -o json_compact</code> against this queue manager. With no <code>-q</code>,
+<code>amqsevt</code> reads the standard <code>SYSTEM.ADMIN.*.EVENT</code> set; <code>-m</code> names the queue
+manager; <strong><code>-o json_compact</code> emits one JSON object per line</strong>. Use <code>json_compact</code>,
+not the pretty <code>-o json</code>: line-oriented pipelines (<code>logger</code>/journald, syslog, a
+file tailer) treat every line as a separate record, so a multi-line pretty event is
+split into fragments; one-object-per-line keeps each event a single record. (Data
+note: IBM's <em>amqsevt</em> topic, at both 9.4 and 10.0.x, lists only <code>text</code> and <code>json</code>
+for <code>-o</code>. <code>json_compact</code> is accepted by the shipped sample and was observed in
+the lab on MQ 9.4.5; it is to verify on the next 10.0.1 bring-up.) Run the
+collector under a small <strong>supervising wrapper</strong>, started via <code>setsid</code> so the wrapper
+leads its own process group, and stop that whole group with a negative-PID <code>kill</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>DEFINE SERVICE(MQ.EVENT.MONITOR) REPLACE +
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  CONTROL(QMGR) SERVTYPE(SERVER) +
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  STARTCMD('/usr/bin/setsid') STARTARG('-w -- /path/to/your/wrapper +QMNAME+') +
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  STOPCMD('/bin/kill') STOPARG('-TERM -- -+MQ_SERVER_PID+') +
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>  DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON')
+</code></pre></div>
+<p>The <code>+QMNAME+</code> / <code>+MQ_SERVER_PID+</code> replaceable inserts <strong>require the <code>+</code>
+delimiters</strong> — without them MQ passes the literal token, not the value, and
+<code>STOPCMD</code> cannot reach the collector. MQ substitutes <code>+MQ_SERVER_PID+</code> <strong>even when
+embedded</strong> in a larger argument, so <code>-TERM -- -+MQ_SERVER_PID+</code> expands to
+<code>kill -TERM -- -&lt;pid&gt;</code>: because <code>setsid</code> made the wrapper the group leader, its PID
+<em>is</em> the process-group ID, and the <strong>negative</strong> PID signals the whole group — the
+wrapper and its <code>amqsevt</code> child together. The <code>--</code> is for procps-ng <code>/bin/kill</code>, so
+<code>-&lt;pid&gt;</code> is read as a process group, not an option.</p>
+<p>The wrapper itself is environment-specific and lives outside this guide, but three
+properties are why it exists rather than putting <code>amqsevt</code> inline:</p>
+<ul>
+<li><strong>Own process group</strong> (<code>setsid</code>) so a single negative-PID <code>STOPCMD</code> reaps the
+  wrapper <em>and</em> <code>amqsevt</code> together — a clean stop with no orphan. (<code>-w</code> keeps the
+  QM-tracked process alive if MQ ever spawns <code>STARTCMD</code> as a group leader, which would
+  force <code>setsid</code> to fork rather than exec in place.)</li>
+<li><strong>Supervise, don't just <code>exec</code></strong> — loop and <strong>restart <code>amqsevt</code> if it exits</strong>, so a
+  crashed collector self-heals instead of staying dead until the queue manager next
+  restarts. A restart that races the previous run's not-yet-released handle hits
+  <code>MQRC_OBJECT_IN_USE</code> (2042) — the event queues are opened for <em>exclusive</em> input — so
+  the wrapper <strong>retries on a short delay</strong> until the queue manager reaps the stale
+  handle (about a ~30 s housekeeping sweep, observed on MQ 9.4.5; to verify on
+  10.0.1). This crash-restart is
+  the whole reason to run under a wrapper rather than a bare <code>exec</code>.</li>
+<li><strong>Line-delimited output</strong> (<code>-o json_compact</code>) so each event is one line — one
+  record to journald/syslog/a file reader — and <code>stdbuf -oL</code> keeps it flushed
+  promptly rather than sitting in a block buffer.</li>
+</ul>
+<h2 id="5-verify-it-worked">5. Verify it worked<a class="headerlink" href="#5-verify-it-worked" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>The classes are enabled.</strong> Display the queue manager and confirm the event
+  attributes read as you set them — in particular <code>CMDEV(NODISPLAY)</code> and
+  <code>PERFMEV(ENABLED)</code>.</li>
+<li><strong>Events are being written.</strong> Provoke one (start or stop a channel, or push a
+  queue past its <code>QDEPTHHI</code>) and confirm the depth of the relevant
+  <code>SYSTEM.ADMIN.*.EVENT</code> queue moves — then returns to zero as the collector
+  drains it (proof the drain is destructive, not browsing).</li>
+<li><strong>The feed is JSON.</strong> Confirm the collector's output is one JSON object per
+  event, each carrying <code>eventSource</code> (with <code>objectName</code> — the affected queue,
+  channel, or queue manager — and <code>objectType</code>), <code>eventType</code>, <code>eventReason</code>,
+  <code>eventCreation</code>, and an <code>eventData</code> block (which includes <code>queueMgrName</code>). Those
+  are the fields you filter on downstream.</li>
+<li><strong>The service travels.</strong> On an HA queue manager, fail it over and confirm the
+  collector is running again on the newly active node. Behaviour varies by HA
+  mechanism — a Native HA takeover is not a <code>strmqm</code>, so start/stop events may
+  differ from a cold start; observe your own mechanism rather than assuming.</li>
+<li><strong>It self-heals.</strong> Kill the running <code>amqsevt</code> directly (not via MQ) and confirm the
+  wrapper restarts it within a few retries — the JSON feed resumes without a
+  queue-manager bounce. Expect a burst of <code>MQRC_OBJECT_IN_USE</code> (2042) log lines while
+  the queue manager reaps the old exclusive handle; that fail-retry-succeed sequence is
+  the wrapper working, not an error.</li>
+</ul>
+<h2 id="6-what-stays-caveats">6. What stays / caveats<a class="headerlink" href="#6-what-stays-caveats" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Performance events need per-queue thresholds</strong> (Step 2). Enabling <code>PERFMEV</code>
+  alone is silent.</li>
+<li><strong><code>BRIDGEEV</code> is z/OS-only.</strong> Issuing it on a Multiplatforms queue manager is
+  rejected — do not include it (Appendix A).</li>
+<li><strong>Destructive drain is single-consumer by design.</strong> The event queues have one
+  reader. If you need more, fan out through a topic; do not add a second
+  destructive consumer, and do not switch to browse (Appendix B).</li>
+<li><strong>Browsing fills the queue.</strong> <code>-b</code> never removes events, so the queue climbs to
+  <code>MAXDEPTH</code> and MQ then discards new events silently. Use it only for a
+  short-lived look, never as the standing collector.</li>
+<li><strong>Event volume can be high</strong> with every class enabled and a busy queue manager.
+  Start broad to see the range, then pare back to the classes you act on. If your
+  host log layer rate-limits (e.g. journald defaults), raise or disable the limit
+  for the event source so bursts are not silently dropped.</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">How this lab implements it</p>
+<p>This lab wires the feed end to end: the shared <code>mq-event-monitor</code> role deploys
+the <code>SERVICE</code> on <strong>every queue manager across all stacks</strong> — all four HA/DR
+arms plus the shared <code>SVCQM</code> counterparty — (its supervising wrapper restarts
+<code>amqsevt</code> on crash and forwards its JSON to <strong>journald</strong>; the proven mechanism and
+its live B-matrix are in
+<code>docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md</code>), Grafana <strong>Alloy</strong>
+ships the journal to <strong>Loki</strong> under a distinct <code>unit="mq-events"</code> label
+(separate from the diagnostic-log stream), and the Grafana boards carry a
+per-object events panel — the queue-manager board shows every event for the
+queue manager, and each queue and channel shows the events for that specific
+object, filtered on <code>eventSource.objectName</code>. The <code>LOGGEREV</code> class is applied
+<strong>log-type-aware</strong> across the fleet: each arm declares its log type, the role
+verifies that declaration against the live <code>qm.ini</code> <code>LogType</code> (failing loud on
+drift), then emits <code>LOGGEREV(ENABLED)</code> on the Native HA (replicated) arms and an
+explicit, accepted <code>LOGGEREV(DISABLED)</code> on the circular arms — a verified
+negative, not an untested omission (<code>logical-minds-foundry/.github#145</code>, task</p>
+<h1 id="809-the-resulting-logger-event-feed-is-read-in-the">809; the resulting logger-event feed is read in the<a class="headerlink" href="#809-the-resulting-logger-event-feed-is-read-in-the" title="Permanent link">&para;</a></h1>
+<p><a href="../nativeha-log-lifecycle-guide/">Native HA log-lifecycle runbook</a>). The
+end-to-end design and the lab-specific wiring are recorded in the
+event-monitoring epic spec (<code>logical-minds-foundry/.github</code>,
+<code>epics/31-event-monitoring/spec.md</code>).</p>
+</div>
+<h2 id="appendix-a-event-class-reference">Appendix A: Event-class reference<a class="headerlink" href="#appendix-a-event-class-reference" title="Permanent link">&para;</a></h2>
+<p>Every queue-manager event-control attribute. All are <code>ENABLED</code>/<code>DISABLED</code> except
+<code>CMDEV</code>, which also takes <code>NODISPLAY</code>. The set below is confirmed against the
+IBM MQ 10.0.x <em>ALTER QMGR</em> reference (re-checked 2026-10-15; it was first
+confirmed against 9.4); the platform column reflects its footnotes.</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Events</th>
+<th>Platform</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AUTHOREV</code></td>
+<td>Authorization events. By default only <em>Not Authorized</em> events; the scope is set by <code>AUTHEVSC</code> (below)</td>
+<td>Multiplatforms</td>
+</tr>
+<tr>
+<td><code>CHADEV</code></td>
+<td>Channel auto-definition events</td>
+<td>Multiplatforms</td>
+</tr>
+<tr>
+<td><code>CHLEV</code></td>
+<td>Channel start/stop/error events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>CMDEV</code></td>
+<td>Command events (<code>ENABLED</code> / <code>NODISPLAY</code> / <code>DISABLED</code>)</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>CONFIGEV</code></td>
+<td>Configuration (object create/alter/delete) events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>INHIBTEV</code></td>
+<td>Inhibit (get/put inhibited) events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>LOCALEV</code></td>
+<td>Local error events (e.g. unknown object)</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>LOGGEREV</code></td>
+<td>Recovery-log events — <strong>linear-logging QMs only</strong> (rejected on circular; omit)</td>
+<td>Multiplatforms</td>
+</tr>
+<tr>
+<td><code>PERFMEV</code></td>
+<td>Performance events (queue depth, service interval) — <strong>needs per-queue thresholds</strong></td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>REMOTEEV</code></td>
+<td>Remote error events (remote-queue resolution)</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>SSLEV</code></td>
+<td>TLS (certificate / handshake) events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>STRSTPEV</code></td>
+<td>Queue-manager start/stop events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>BRIDGEEV</code></td>
+<td>IMS-bridge events</td>
+<td><strong>z/OS only</strong> — exclude on Multiplatforms</td>
+</tr>
+</tbody>
+</table>
+<p><strong>9.4 → 10.0 change: <code>AUTHOREV</code> scope and <code>AUTHEVSC</code> (data).</strong> The 9.4 <em>ALTER
+QMGR</em> topic says: <em>"For Long Term Support and Continuous Delivery before IBM MQ
+9.4.3, AUTHOREV applies to unsuccessful authorization events only. From IBM MQ
+9.4.3, AUTHOREV applies to successful and unsuccessful authorization events"</em>
+(<a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-alter-qmgr-alter-queue-manager-settings">9.4.x</a>).
+The 10.0 topic says: <em>"From IBM MQ 10.0.0, AUTHOREV applies to successful and
+unsuccessful authorization events"</em>, and documents the scope attribute
+<code>AUTHEVSC</code>: <em>"FAILURES Only Not Authorized authorization events are generated.
+This is the queue manager's initial default value. ALLCONNS All Not Authorized
+and Authorized Connection events are generated. ALLCHECKS … all Not Authorized
+and Authorized events, including connection events, are generated, which means
+that a larger number of entries are generated"</em>
+(<a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings">10.0.x</a>).
+IBM lists this for 10.0 LTS as <em>"Extended authority events for positive
+authentication"</em>
+(<a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html">What's new in IBM MQ 10.0.0 for Multiplatforms</a>).
+<em>Judgment:</em> leave <code>AUTHEVSC</code> at its default <code>FAILURES</code>. The enable command in
+section 4 is unchanged and still yields failure-only events, which is the signal
+worth acting on. Use <code>ALLCONNS</code> only when you need an audit trail of successful
+connections, and size the event stream for it. <code>ALLCHECKS</code> reports every
+successful authority check and is far noisier. <code>AUTHEVSC</code> is not supported on
+z/OS. <em>To verify on the next 10.0.1 bring-up:</em> <code>DISPLAY QMGR AUTHEVSC</code> reads
+<code>FAILURES</code> on a lab queue manager.</p>
+<p>Per-queue attributes for performance events: <code>QDPMAXEV</code> (queue full), <code>QDPHIEV</code> /
+<code>QDPLOEV</code> with <code>QDEPTHHI</code> / <code>QDEPTHLO</code> (depth high/low), and <code>QSVCIEV</code> with
+<code>QSVCINT</code> (service interval).</p>
+<h2 id="appendix-b-alternatives-and-tradeoffs">Appendix B: Alternatives and tradeoffs<a class="headerlink" href="#appendix-b-alternatives-and-tradeoffs" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Options (strongest → weakest)</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reader</td>
+<td><strong><code>amqsevt</code> sample</strong> → a bespoke PCF-parsing application</td>
+<td>The sample emits JSON with zero parsing code; a custom app is only warranted for logic the sample cannot express</td>
+</tr>
+<tr>
+<td>Deployment</td>
+<td><strong>MQ <code>SERVICE</code>, <code>CONTROL(QMGR)</code></strong> → external client collector → external local daemon</td>
+<td>The service travels with the queue manager across failover; an external client must chase the active instance; a local daemon must coordinate with the active node</td>
+</tr>
+<tr>
+<td>Consumption</td>
+<td><strong>Destructive drain</strong> → topic fan-out (for multiple readers) → browse</td>
+<td>Drain keeps the queue clear with one reader; a topic serves several readers; browse fills the queue and then drops events silently</td>
+</tr>
+<tr>
+<td>Command events</td>
+<td><strong><code>CMDEV(NODISPLAY)</code></strong> → <code>CMDEV(ENABLED)</code> → <code>CMDEV(DISABLED)</code></td>
+<td><code>NODISPLAY</code> keeps admin commands and drops inquire noise; <code>ENABLED</code> is drowned by polling collectors; <code>DISABLED</code> loses the triage view</td>
+</tr>
+</tbody>
+</table>
+<h2 id="appendix-d-troubleshooting">Appendix D: Troubleshooting<a class="headerlink" href="#appendix-d-troubleshooting" title="Permanent link">&para;</a></h2>
+<p>Work the surfaces in order; the first one that is empty is your fault domain.</p>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No events at all</td>
+<td>the class is not enabled on the queue manager</td>
+<td><code>ALTER QMGR</code> with the class <code>ENABLED</code>; re-check with <code>DISPLAY QMGR</code></td>
+</tr>
+<tr>
+<td>No performance events, other classes fine</td>
+<td><code>PERFMEV</code> enabled but no queue thresholds</td>
+<td>set <code>QDPMAXEV</code>/<code>QDPHIEV</code> (+ <code>QDEPTHHI</code>) on the queues</td>
+</tr>
+<tr>
+<td>Event queue depth climbs and never falls</td>
+<td>the collector is browsing (<code>-b</code>), or is not running</td>
+<td>run a destructive collector (no <code>-b</code>); confirm the service is started</td>
+</tr>
+<tr>
+<td><code>ALTER QMGR</code> rejected</td>
+<td><code>BRIDGEEV</code> included on Multiplatforms</td>
+<td>remove <code>BRIDGEEV</code> (z/OS only)</td>
+</tr>
+<tr>
+<td><code>ALTER QMGR</code> rejected, no classes enabled</td>
+<td><code>LOGGEREV(ENABLED)</code> on a <strong>circular-logging</strong> QM (<code>AMQ8518E</code>) — the atomic <code>ALTER</code> is rejected whole</td>
+<td>remove <code>LOGGEREV</code> (linear-logging only); re-check with <code>DISPLAY QMGR</code></td>
+</tr>
+<tr>
+<td>Events arrive split across many log records / fragments</td>
+<td>pretty <code>-o json</code> (multi-line) into a line-oriented pipeline (<code>logger</code>, syslog, file)</td>
+<td>use <code>-o json_compact</code> — one JSON object per line, one record per event</td>
+</tr>
+<tr>
+<td>Collector (or a stray <code>amqsevt</code>) left running after the queue manager stops</td>
+<td><code>STOPCMD</code> doesn't reach the whole process group</td>
+<td>start the wrapper under <code>setsid</code> and stop with <code>kill -TERM -- -+MQ_SERVER_PID+</code> — the negative PID signals the whole group</td>
+</tr>
+<tr>
+<td><code>amqsevt</code> dies but the queue manager stays up, and the event feed just stops</td>
+<td>the collector isn't supervised (a bare <code>exec</code>)</td>
+<td>run <code>amqsevt</code> under a wrapper that restarts it on exit, retrying through the <code>MQRC_OBJECT_IN_USE</code> (2042) exclusive-handle reap window</td>
+</tr>
+<tr>
+<td>Events lag, then arrive in bursts</td>
+<td>the collector's output is block-buffered</td>
+<td>line-buffer the collector's standard output in the wrapper</td>
+</tr>
+<tr>
+<td>Bursts of events missing under load</td>
+<td>the OS log layer is rate-limiting</td>
+<td>raise or disable rate limiting for the event source</td>
+</tr>
+</tbody>
+</table>
+<h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
+<p>IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic was compared with
+its 9.4 counterpart):</p>
+<ul>
+<li><em>Sample program to monitor instrumentation events on Multiplatforms</em>
+  (<code>amqsevt</code>) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=monitoring-sample-program-monitor-instrumentation-events-multiplatforms">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=monitoring-sample-program-monitor-instrumentation-events-multiplatforms</a>.
+  Same as 9.4. It documents <code>-o text</code> and <code>-o json</code> only (see the data note in
+  section 4, step 3).</li>
+<li><em>ALTER QMGR (alter queue manager settings)</em> (the event-class attributes) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings</a>.
+  Differs from 9.4 on <code>AUTHOREV</code> / <code>AUTHEVSC</code> (Appendix A).</li>
+<li><em>ALTER queues (alter queue settings)</em> (the per-queue performance-event
+  thresholds) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-queues-alter-queue-settings">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-queues-alter-queue-settings</a>.
+  The thresholds this guide uses are unchanged from 9.4.</li>
+<li><em>DEFINE SERVICE (create a new service definition) on Multiplatforms</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-define-service-create-new-service-definition-multiplatforms">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-define-service-create-new-service-definition-multiplatforms</a>.
+  Same as 9.4.</li>
+<li><em>Using replaceable inserts on service definitions</em> (<code>+QMNAME+</code>,
+  <code>+MQ_SERVER_PID+</code>) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=services-using-replaceable-inserts-service-definitions">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=services-using-replaceable-inserts-service-definitions</a>.
+  Same as 9.4.</li>
+<li><em>Event types</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=events-event-types">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=events-event-types</a>. Same as
+  9.4.</li>
+<li><em>Instrumentation events</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=monitoring-instrumentation-events">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=monitoring-instrumentation-events</a>.
+  Same as 9.4.</li>
+<li><em>What's new in IBM MQ 10.0.0 for Multiplatforms</em> ("Extended authority events
+  for positive authentication") —
+  <a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html">https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight", "search.suggest"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../js/resize-iframes.js"></script>
+      
+    
+  </body>
+</html>

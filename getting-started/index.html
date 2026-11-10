@@ -1,0 +1,1928 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Reproducible nested-virtualization lab for IBM MQ HA and DR resiliency on Linux">
+      
+      
+      
+      
+        <link rel="prev" href="../methodology/">
+      
+      
+        <link rel="next" href="../architecture/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Getting Started - MQ Resiliency Lab for Linux</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#getting-started" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="MQ Resiliency Lab for Linux" class="md-header__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MQ Resiliency Lab for Linux
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Getting Started
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Releases
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../methodology/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Methodology
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../operate/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operate & Observe
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../guides/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../reference/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../develop/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Develop the lab
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../design-and-specs/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Design & Specs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="MQ Resiliency Lab for Linux" class="md-nav__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    MQ Resiliency Lab for Linux
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Releases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../releases/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Release Notes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methodology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methodology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-download-and-verify-the-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Download and verify the release
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-set-up-and-pre-flight-the-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Set up and pre-flight the host
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../operate/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate & Observe
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operate & Observe
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operate/guest-components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../guides/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/guide-standard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authoring standard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/_template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/mq-json-logging-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON diagnostic logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/mq-event-monitoring-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instrumentation event monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/mq-metrics-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics & monitoring configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/mq-tcp-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TCP configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/mq-authorization-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & access control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/nativeha-log-lifecycle-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native HA log lifecycle (runbook)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../develop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Develop the lab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design-and-specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design & Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-download-and-verify-the-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Download and verify the release
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-set-up-and-pre-flight-the-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Set up and pre-flight the host
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h1>
+<p>This page takes you from nothing — a bare x86 Linux host — to a running MQ stack
+you can fail over. It stays at orientation altitude and points to the real
+commands; per-arm operational detail lives in the design spec and the
+<a href="../operate/">Operate &amp; Observe</a> section.</p>
+<div class="admonition warning">
+<p class="admonition-title">Consumer path status</p>
+<p>The consumer path is documented; end-to-end validation on a clean x86 host
+is tracked in
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/910">#910</a>.</p>
+</div>
+<h2 id="1-prerequisites">1. Prerequisites<a class="headerlink" href="#1-prerequisites" title="Permanent link">&para;</a></h2>
+<p>You bring a virtualization-capable host and a short list of tools; the lab
+brings everything else (IBM <strong>MQ Advanced for Developers</strong>, the no-charge
+edition, is fetched automatically by the tooling).</p>
+<ul>
+<li><strong>An x86-64 Linux host with root/sudo</strong> and nested virtualization — the lab
+  creates nested libvirt/QEMU/Vagrant guests and wants a beefy box (roughly
+  12 vCPU / 64 GiB). <code>mqlab doctor</code> reports anything missing.</li>
+<li><strong><a href="https://docs.astral.sh/uv/">uv</a></strong> and <strong>Python 3.14</strong> — the orchestrator's
+  runtime. <code>uv</code> provisions and manages its own pinned 3.14 interpreter (the base
+  OS Python is left untouched), so you do not install Python yourself.</li>
+<li><strong>libvirt / QEMU / Vagrant</strong> — the virtualization stack the guests run on.</li>
+<li><strong>gpg</strong> — to verify the signed release below.</li>
+<li><strong>A RHEL subscription</strong> — only for the RHEL-based arms (RDQM, Native HA on
+  RHEL). The canonical <code>pcmk-ubuntu</code> arm used throughout this page needs nothing
+  extra.</li>
+</ul>
+<h2 id="2-download-and-verify-the-release">2. Download and verify the release<a class="headerlink" href="#2-download-and-verify-the-release" title="Permanent link">&para;</a></h2>
+<p>The lab ships as a <strong>signed tarball</strong> from the project's
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/releases">Releases page</a>.
+Each release carries four assets: the tarball, its detached signature, a
+<code>SHA256SUMS</code>, and a signed <code>SHA256SUMS.asc</code>.</p>
+<p>Download the tarball and the two checksum files (substitute the version you're
+installing):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">VERSION</span><span class="o">=</span>vX.Y.Z
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">base</span><span class="o">=</span>https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/releases/download/<span class="nv">$VERSION</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>curl<span class="w"> </span>-LO<span class="w"> </span><span class="nv">$base</span>/mq-resiliency-lab-for-linux-<span class="nv">$VERSION</span>.tar.gz
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>curl<span class="w"> </span>-LO<span class="w"> </span><span class="nv">$base</span>/SHA256SUMS
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>curl<span class="w"> </span>-LO<span class="w"> </span><span class="nv">$base</span>/SHA256SUMS.asc
+</code></pre></div>
+<p>Verify it <strong>before</strong> you unpack. The trust root is the <strong>fingerprint below plus
+a key fetched out-of-band</strong> — not any key bundled in the tarball:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>gpg<span class="w"> </span>--recv-keys<span class="w"> </span>5BABD50A78EBF24D2410AE52ADF1A99B75D24E54<span class="w">     </span><span class="c1"># or import the key from the release page over HTTPS</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>gpg<span class="w"> </span>--fingerprint<span class="w"> </span>5BABD50A78EBF24D2410AE52ADF1A99B75D24E54<span class="w">   </span><span class="c1"># cross-check it matches the README</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>gpg<span class="w"> </span>--verify<span class="w"> </span>SHA256SUMS.asc<span class="w"> </span>SHA256SUMS<span class="w">                       </span><span class="c1"># the checksums are signed by that key</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>sha256sum<span class="w"> </span>-c<span class="w"> </span>SHA256SUMS<span class="w">                                      </span><span class="c1"># the tarball matches the checksums</span>
+</code></pre></div>
+<p>Once both checks pass, unpack the tarball and enter the tree:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>tar<span class="w"> </span>xzf<span class="w"> </span>mq-resiliency-lab-for-linux-<span class="nv">$VERSION</span>.tar.gz
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">cd</span><span class="w"> </span>mq-resiliency-lab-for-linux-<span class="nv">$VERSION</span>
+</code></pre></div>
+<h2 id="3-set-up-and-pre-flight-the-host">3. Set up and pre-flight the host<a class="headerlink" href="#3-set-up-and-pre-flight-the-host" title="Permanent link">&para;</a></h2>
+<p>From inside the extracted tree, build the Python environment and pre-flight the
+host:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>./scripts/setup<span class="w">     </span><span class="c1"># checks uv + Python 3.14, then runs `uv sync` to build the venv</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>.<span class="w"> </span>.venv/bin/activate<span class="w">   </span><span class="c1"># put `mqlab` (and its companion tools) on PATH</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>mqlab<span class="w"> </span>doctor<span class="w">        </span><span class="c1"># pre-flight the host: arch, KVM, libvirt, and required tools</span>
+</code></pre></div>
+<p><code>./scripts/setup</code> sets up the <strong>environment</strong>, not the lab: it verifies <code>uv</code> and
+a uv-managed Python 3.14 are present — installing 3.14 via <code>uv</code> if missing —
+runs <code>uv sync</code> to materialize the virtual environment, and prints the next
+commands. It cannot change your shell's <code>PATH</code>, so activate the venv once per
+shell. The bare <code>mqlab</code> commands on this site assume it is active. (Prefixing
+each command with <code>uv run</code>, e.g. <code>uv run mqlab doctor</code>, works too.)
+<code>mqlab doctor</code> then confirms the host can actually run the guests
+before you commit to a bring-up. Two of its lines are informational and never fail the
+host. <code>rhel-stacks</code> says whether the RHEL arms can run here (they need x86_64).
+<code>x86-64-v3: yes</code> or <code>no</code> says whether the host counts as x86-64-v3: an x86_64 CPU with
+AVX2 and the rest of the v3 flags, under KVM. RHEL 10 requires it, and RHEL 10 is the
+default OS of both RHEL stacks (<code>nativeha-rhel-crr</code> and <code>rdqm-rhel</code>). On a <code>no</code> host a
+plain <code>mqlab bootstrap nativeha-rhel-crr</code> or <code>mqlab bootstrap rdqm-rhel</code> is refused with
+that reason; build the stack on RHEL 9 instead, with <code>os: rhel:9</code> in a build file
+(<code>mqlab bootstrap &lt;stack&gt; --config &lt;file&gt;</code>).</p>
+<div class="admonition note">
+<p class="admonition-title">After a Python-version bump</p>
+<p>The minimum Python version is the <code>requires-python</code> floor in
+<code>pyproject.toml</code>, and it is also the version the lab runs and CI tests
+(pinned in <code>vergil.toml</code> until the lab follows the Vergil version window,</p>
+<h1 id="1685">1685).<a class="headerlink" href="#1685" title="Permanent link">&para;</a></h1>
+<p>If the floor changes (or you are upgrading from an older checkout), re-run
+<code>./scripts/setup</code> (or <code>uv sync</code>) to rebuild the <code>.venv</code> against a
+uv-managed interpreter — an existing venv is <strong>not</strong> rebuilt automatically.</p>
+</div>
+<h2 id="4-bring-up-your-first-stack">4. Bring up your first stack<a class="headerlink" href="#4-bring-up-your-first-stack" title="Permanent link">&para;</a></h2>
+<p>One command stands up a whole HA/DR stack. The canonical starting arm is
+<strong><code>pcmk-ubuntu</code></strong> — Pacemaker/SAN on Ubuntu, subscription-free and x86-native:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># net → vms → provision → observe, every step streamed</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>mqlab<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">      </span><span class="c1"># phase completion (✓/✗) for this stack</span>
+</code></pre></div>
+<p><code>bootstrap</code> runs four idempotent phases in order — define the lab networks, boot
+the guest fleet, provision the cluster and queue manager, then wire up
+observability — and leaves you with a <strong>running queue manager</strong>. Guests boot
+pre-baked, per-role box images rather than installing MQ on every bring-up, which
+is why this takes minutes rather than the better part of an hour.</p>
+<p>Every bootstrap also prints two things worth a glance:</p>
+<ul>
+<li><strong>An <code>environment:</code> line.</strong> <code>mqlab</code> detects the platform it runs on and
+  applies a matching profile from <code>topology.yaml</code>: <code>macos</code> inside an Apple
+  Virtualization VM on an Apple-silicon Mac, and <code>cloud</code> on Google Compute
+  Engine. On any other host (a bare-metal x86 box, for example) it uses the base
+  topology unchanged and says so. You don't need to set anything. Setting
+  <code>MQLAB_ENV=macos|cloud</code> overrides detection; if you do, set it for <code>teardown</code>
+  too.</li>
+<li><strong>A perf summary.</strong> Each run, including a failed one, writes a
+  <code>perf-&lt;timestamp&gt;.json</code> report next to its transcript under
+  <code>build/state/runs/</code>, with per-phase and per-step timings, readiness
+  milestones, and host and guest CPU-contention samples. <code>mqlab perf diff a.json
+  b.json</code> compares two runs.</li>
+</ul>
+<h3 id="bootstrap-performance">Bootstrap performance<a class="headerlink" href="#bootstrap-performance" title="Permanent link">&para;</a></h3>
+<p><strong>macOS, Apple silicon (data).</strong> A cold <code>nativeha-ubuntu --no-dr</code> bootstrap
+took <strong>643 s</strong> and <strong>621 s</strong> in the two clean acceptance runs
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1200">#1200</a>).
+Before the fix in
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1241">#1241</a>,
+the same bring-up failed after about 23 minutes, or never finished its
+<code>observe</code> phase in more than 40 minutes.</p>
+<p><strong>Why macOS needs huge pages (data from spike
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1240">#1240</a>,
+reading is judgment).</strong> Under arm64 nested virtualization, a guest that
+churns memory (the obs node's Java services) made page faults in <em>every</em>
+guest up to hundreds of times slower. The likely cause is the macOS hypervisor
+handling the nested guests' 4 KiB memory mappings. Backing guest RAM with
+2 MiB huge pages removed the slowdown. So on macOS, <code>bootstrap</code> first
+reserves enough huge pages, in the VM that hosts the guests, for the guests it
+is about to boot: 11,392 pages,
+about <strong>22 GiB</strong>, for <code>nativeha-ubuntu --no-dr</code>. If it can't, it stops
+before booting anything rather than fall back to 4 KiB pages. The last
+stack's <code>teardown</code> gives the memory back. The x86 cloud host (Intel nested
+KVM) doesn't show the problem, so the <code>cloud</code> profile and the base topology keep
+4 KiB pages and reserve nothing.</p>
+<p><strong>x86 cloud (data).</strong> On a Google Compute Engine <code>n2-standard-16</code> host with an
+SSD (<code>pd-ssd</code>) boot disk, five consecutive cold <code>nativeha-ubuntu --no-dr</code>
+bootstraps took <strong>721 s, 673 s, 684 s, 687 s and 689 s</strong> (median 687 s), all
+clean
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1267">#1267</a>,
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1200">#1200</a>).
+Run 1 includes the one-time upload of freshly baked boxes. Before the SSD boot
+disk and the per-run fixes, the same bring-up took 1000 s, 987 s and 1367 s
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1247">#1247</a>).</p>
+<p>Both platforms now finish well under the 900 s target. macOS and cloud run on
+different hardware, so compare the two directionally, not second for second.</p>
+<p>Method, raw numbers, and the comparison rules are in
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md#52-measured-results">perf and staging</a>.</p>
+<h3 id="your-first-message">Your first message<a class="headerlink" href="#your-first-message" title="Permanent link">&para;</a></h3>
+<p>With the stack up, prove the whole point of the lab — that a live message path
+survives failover. Confirm the queue manager is up, then (via the
+<a href="../operate/">Operate &amp; Observe</a> walkthrough) put a message, fail the active
+node, and watch the queue manager refloat with the message intact:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># confirm the QM is Started</span>
+</code></pre></div>
+<p>The deep dive below explains what each <code>mqlab</code> verb is doing under the hood.</p>
+<details class="note">
+<summary>Developing with Vergil? (that's basically just the author)</summary>
+<p>The lab is <em>developed</em> inside an ephemeral
+<a href="https://github.com/vergil-project">Vergil</a> VM — the author's personal
+solo-practitioner dev tooling — rather than on the host directly. That is a
+development convenience, <strong>not</strong> part of the consumer path: strip Vergil away
+and what remains is exactly the tree you unpacked above. If you're a Vergil
+user, <a href="../develop/">Develop the lab</a> covers the <code>vrg-vm</code> workflow.</p>
+</details>
+<h2 id="how-mqlab-drives-the-lab">How <code>mqlab</code> drives the lab<a class="headerlink" href="#how-mqlab-drives-the-lab" title="Permanent link">&para;</a></h2>
+<p>The lab is driven by <strong><code>mqlab</code></strong>, an operator orchestrator that does the
+opposite of most tooling: rather than hiding the mechanics, it <strong>shows</strong> them.
+Every command it runs — <code>virsh</code>, Ansible, <code>runmqsc</code> — is printed verbatim as it
+runs, streamed live, and teed to a transcript under <code>build/state/runs/</code>. You can
+watch a step, understand it, then reproduce it by hand. (Why expose rather than
+encapsulate? Because the deliverable is transparent evidence for the
+RDQM-vs-Ubuntu comparison — see <a href="../design-and-specs/">design &amp; specs</a>.)</p>
+<h3 id="one-command-brings-up-a-stack-mqlab-bootstrap">One command brings up a stack: <code>mqlab bootstrap</code><a class="headerlink" href="#one-command-brings-up-a-stack-mqlab-bootstrap" title="Permanent link">&para;</a></h3>
+<p>A <strong>stack</strong> is one HA/DR arm — a mechanism on an OS. <code>mqlab bootstrap &lt;stack&gt;</code>
+stands the whole thing up in one command, running four idempotent <strong>phases</strong> in
+order:</p>
+<table>
+<thead>
+<tr>
+<th>phase</th>
+<th>what it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>net</code></td>
+<td>define + autostart + start every lab libvirt network</td>
+</tr>
+<tr>
+<td><code>vms</code></td>
+<td><code>vagrant up</code> the stack's guests (plus the shared commons VMs)</td>
+</tr>
+<tr>
+<td><code>provision</code></td>
+<td>configure the cluster/storage and build the queue manager</td>
+</tr>
+<tr>
+<td><code>observe</code></td>
+<td>render + provision Prometheus/Grafana targets for the stack</td>
+</tr>
+</tbody>
+</table>
+<p>Each phase is gated by a live "satisfied?" probe, so bootstrap is <strong>state-aware
+and resumable</strong>: it starts from the first <em>unsatisfied</em> phase and a re-run picks
+up exactly where a previous one stopped — nothing already done is redone. If a
+step fails, bootstrap halts and prints the resume hint (<code>mqlab bootstrap &lt;stack&gt;
+--from &lt;phase&gt;</code>). Add <code>--step</code> to pause after each step and go poke at the live
+system; <code>--from &lt;phase&gt;</code> / <code>--only &lt;phase&gt;</code> force the phase selection by hand.</p>
+<p><strong>Lighter footprint with <code>--no-dr</code>.</strong> Most day-to-day work doesn't need the DR
+site — it matters only when you're actively testing cross-site failover. Under a
+full lab load the DR (site-B) guests add enough replication and CPU pressure that
+a stack's HA site can struggle to hold quorum. <code>mqlab bootstrap &lt;stack&gt; --no-dr</code>
+brings up <strong>only the HA site</strong>: it skips the DR-site guests and the DR
+provisioning, leaving a stack that forms HA and runs its workload on a fraction of
+the footprint. Which guests are skipped is the stack's <code>dr_groups</code> in
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml"><code>topology.yaml</code></a>.
+The flag is <strong>stateless</strong> — it shapes only that bring-up and never tears anything
+down — so adding DR later is simply re-running <code>mqlab bootstrap &lt;stack&gt;</code> <em>without</em>
+it, over the live HA site. A stack that declares no DR site to skip rejects
+<code>--no-dr</code> rather than mis-provisioning.</p>
+<p>The lab's shape is a single source of truth:
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml"><code>lab/topology.yaml</code></a>
+— the libvirt networks (data, heartbeat, WAN, client, SVC, SAN), every guest's
+NICs and platform, and the stack registry itself. See the
+<a href="../architecture/">Architecture</a> walkthrough for what each network is for.</p>
+<p>The four stacks bootstrap knows about:</p>
+<table>
+<thead>
+<tr>
+<th>stack</th>
+<th>mechanism</th>
+<th>OS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pcmk-ubuntu</code></td>
+<td>Pacemaker/SAN (shared-LUN HA + cross-site DR)</td>
+<td>Ubuntu</td>
+</tr>
+<tr>
+<td><code>rdqm-rhel</code></td>
+<td>RDQM (DRBD replicated HA/DR)</td>
+<td>RHEL</td>
+</tr>
+<tr>
+<td><code>nativeha-rhel-crr</code></td>
+<td>Native HA (raft-log replication)</td>
+<td>RHEL</td>
+</tr>
+<tr>
+<td><code>nativeha-ubuntu</code></td>
+<td>Native HA (raft-log replication)</td>
+<td>Ubuntu</td>
+</tr>
+</tbody>
+</table>
+<h3 id="choose-an-os-version">Choose an OS version<a class="headerlink" href="#choose-an-os-version" title="Permanent link">&para;</a></h3>
+<p>Each stack builds on a default OS major and can offer others. Both come from one
+file, the OS version catalog
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml"><code>lab/versions.yaml</code></a>.
+At the current pins:</p>
+<table>
+<thead>
+<tr>
+<th>stack</th>
+<th>default</th>
+<th>also selectable</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pcmk-ubuntu</code></td>
+<td>Ubuntu 26.04 (IBM-unsupported; warns)</td>
+<td>Ubuntu 24.04</td>
+</tr>
+<tr>
+<td><code>nativeha-ubuntu</code></td>
+<td>Ubuntu 26.04 (IBM-unsupported; warns)</td>
+<td>Ubuntu 24.04</td>
+</tr>
+<tr>
+<td><code>nativeha-rhel-crr</code></td>
+<td>RHEL 10 (10.2; needs an x86-64-v3 host)</td>
+<td>RHEL 9 (9.6)</td>
+</tr>
+<tr>
+<td><code>rdqm-rhel</code></td>
+<td>RHEL 10 (10.2; needs an x86-64-v3 host)</td>
+<td>RHEL 9 (9.6)</td>
+</tr>
+</tbody>
+</table>
+<p>The shared nodes are not selectable. <code>obs</code>, the two DNS nodes and the SAN targets
+run no MQ and are on Ubuntu 26.04. The MQ commons (<code>svc-sim</code>, <code>app-client</code>,
+<code>mon-probe</code>) run MQ, and are on Ubuntu 26.04 too, by the same lab decision as the
+Ubuntu defaults (below).</p>
+<p>A plain <code>mqlab bootstrap &lt;stack&gt;</code> uses the default. To pick another supported
+version, write a <strong>build file</strong> and pass it with <code>--config</code>. There is no
+command-line shorthand; the file is the only way to choose:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">'os: rhel:9'</span><span class="w"> </span>&gt;<span class="w"> </span>rhel9.yaml
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>nativeha-rhel-crr<span class="w"> </span>--config<span class="w"> </span>rhel9.yaml
+</code></pre></div>
+<p>Bootstrap resolves the OS before it renders anything and prints
+<code>&lt;stack&gt;: OS &lt;os&gt; (instance record …)</code>. It writes that choice to the stack's
+<strong>instance record</strong>, <code>build/state/instances/&lt;stack&gt;.json</code>, and the stack keeps that
+OS for its whole life:</p>
+<ul>
+<li>A resume without <code>--config</code> reuses the recorded OS, even if the catalog default
+  has moved since.</li>
+<li>A <code>--config</code> that asks for a different OS is refused
+  (<code>&lt;stack&gt; is running &lt;os&gt;; requested &lt;os&gt;; run mqlab teardown &lt;stack&gt; first</code>).
+  Tear the stack down, which deletes the record, then bootstrap again.</li>
+<li>A stack whose VMs are running without a record (one brought up before records
+  existed) is refused by every stack command except <code>teardown</code>.</li>
+<li>A version the stack does not list is refused, and the message names the versions
+  it supports.</li>
+</ul>
+<p><strong>Ubuntu 26.04 is ahead of IBM.</strong> IBM's MQ 10.0 support matrix (the SPCR) does not
+list Ubuntu 26.04. The lab makes it the Ubuntu default anyway, by a decision
+recorded in the catalog: the lab exists to run at the leading edge, and to find and
+report problems there before others hit them. Bootstrap prints
+<code>WARNING: IBM does not support MQ on ubuntu:26 (&lt;SPCR link&gt;); it is selectable for
+lab use only, and is a lab default by recorded decision (&lt;issue&gt;, decided &lt;date&gt;)</code>
+and carries on. To build the stack itself on the Ubuntu release IBM supports, use
+<code>os: ubuntu:24</code> in a <code>--config</code> file; that drops the stack warning.</p>
+<p>The shared MQ nodes (<code>svc-sim</code>, <code>app-client</code>, <code>mon-probe</code>, the catalog's <code>infra_mq</code>)
+also run Ubuntu 26.04 by the same decision, under every stack, RHEL included. So
+every bootstrap also prints
+<code>WARNING: the shared MQ nodes (infra_mq) run ubuntu:26, which IBM does not support
+for MQ (&lt;SPCR link&gt;); a lab default by recorded decision (&lt;issue&gt;, decided &lt;date&gt;)</code>,
+even when the commons are already running: the stack's MQ traffic runs through those
+nodes either way. A <code>--config</code> file cannot change this; it goes away by itself when
+IBM lists Ubuntu 26.04. The
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md">OS-version support matrix</a>
+(§4, §6.1) records the decision and IBM's status.</p>
+<p><strong>RHEL 10 and x86-64-v3.</strong> RHEL 10 is built for the x86-64-v3 CPU level. On a host
+where <code>mqlab doctor</code> reports <code>x86-64-v3: no</code>, a plain <code>mqlab bootstrap nativeha-rhel-crr</code>
+or <code>mqlab bootstrap rdqm-rhel</code> is refused, and the message tells you to put
+<code>os: rhel:9</code> in a build file. The lab never falls back to RHEL 9 on its own. A plain
+<code>mqlab box build</code> on such a host builds no RHEL boxes; put <code>os: rhel:9</code> in the build
+file to bake both RHEL stacks on RHEL 9. <code>rdqm-rhel</code> defaults to RHEL 10 since
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473">#1473</a>:
+IBM supports RDQM on RHEL 10 from MQ 10.0.1, the lab's current MQ pin, and the stack
+passed a cold-rebuild validation on it
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475">#1475</a>).
+RHEL 9 stays selectable for both RHEL stacks.</p>
+<p>The sourced support status for every stack and OS is in the
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md">OS-version support matrix</a>.
+Boxes are named <code>&lt;role&gt;-&lt;os&gt;&lt;major&gt;</code> (for example <code>mq-nativeha-ubuntu24</code>), so each
+OS major gets its own baked box. When a catalog change leaves old boxes behind,
+<code>mqlab box gc --unreferenced --dry-run</code> lists what it would reclaim; see the
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md">box model</a>.</p>
+<p>Two <code>mqlab vm</code> utilities render or reach the guests directly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>inventory<span class="w">     </span><span class="c1"># render build/work/inventory.ini from topology — the static map</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>pcmk-a1<span class="w">   </span><span class="c1"># drop into a shell on one guest</span>
+</code></pre></div>
+<p>When you're done, tear a stack back down:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>mqlab<span class="w"> </span>teardown<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># destroy the stack's guests + overlay disks</span>
+</code></pre></div>
+<p><code>teardown</code> reclaims the shared commons VMs (obs/probe/svc/app/infra) only when no
+other stack is still up — pass <code>--commons</code> to force their removal, or leave them
+for the next stack. Like bootstrap, it names a stack, so a bare <code>mqlab teardown</code>
+cannot wipe everything by accident.</p>
+<h3 id="build-the-queue-manager-with-mqlab-qm">Build the queue manager with <code>mqlab qm</code><a class="headerlink" href="#build-the-queue-manager-with-mqlab-qm" title="Permanent link">&para;</a></h3>
+<p>The <code>provision</code> phase already stands the queue manager up as part of bringing a
+stack live — bootstrap leaves you with a running QM. <strong><code>mqlab qm</code></strong> is the
+lifecycle layer <em>on top</em> of that: drive the QM without re-running a whole
+bootstrap. It dispatches per stack, so the same verbs cover every mechanism
+(Pacemaker <code>pcs</code>, RDQM, Native HA <code>systemctl</code>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># pcs status resources — where mq_group is Started</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>down<span class="w">   </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># stop the QM cluster-side (pcs resource disable)</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>up<span class="w">     </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># start it again (pcs resource enable)</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>create<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># (re)build the QM + its HA resource group</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>destroy<span class="w"> </span>pcmk-ubuntu<span class="w">  </span><span class="c1"># remove the QM + its HA resources</span>
+</code></pre></div>
+<p>For the Pacemaker/SAN stack, <code>qm create</code> runs the <strong><code>mq-pcmk-qmgr</code> Ansible
+role</strong>: the queue manager is created on the shared LUN, taught to every node
+(<code>dspmqinf</code> → <code>addmqinf</code>), wrapped in a <strong>disabled</strong> systemd unit, and handed to
+Pacemaker as the <code>mq_fs</code> → <code>mq_vip</code> → <code>mq_qm</code> resource group. <code>qm up</code> / <code>qm down</code>
+go <strong>through Pacemaker</strong> — <code>pcs resource enable</code> / <code>disable mq_group</code> on the
+cluster's first node. Because the systemd units are disabled, the cluster is the
+<em>only</em> thing that starts the QM; you never <code>strmqm</code> it by hand.</p>
+<p>The role is the point: the streamed, verbatim task output <em>is</em> the reproducible,
+step-by-step HA procedure — the artifact a client re-implements under their own
+automation. Watching it run is how you come to understand exactly how MQ HA is
+built on Pacemaker/SAN.</p>
+<blockquote>
+<p><strong>Which verbs each arm supports</strong> is a live matrix: <code>mqlab parity</code> prints it,
+and <code>mqlab --help</code> (or <code>mqlab &lt;group&gt; --help</code>) lists the full command surface —
+including cross-site DR (<code>mqlab dr cutover</code> / <code>failback</code>) and the shared
+observability stack (<code>mqlab commons</code>).</p>
+</blockquote>
+<h2 id="exercise-a-stack-end-to-end">Exercise a stack end to end<a class="headerlink" href="#exercise-a-stack-end-to-end" title="Permanent link">&para;</a></h2>
+<p>The quickest proof that a stack works is to bootstrap one arm and exercise it: a
+queue manager, a simulated upstream (<code>svc-sim</code>), and an application client
+exchanging messages over the client network. The canonical <code>pcmk-ubuntu</code> arm
+above does this; an even lighter arm to try is <strong>Native HA on Ubuntu</strong> (no SAN,
+and it boots native on an x86 dev host):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># bring the whole arm up end to end</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w">  </span>nativeha-ubuntu<span class="w">  </span><span class="c1"># confirm the QM is up: dspmq -o nativeha -x on both sites</span>
+</code></pre></div>
+<p>Send a message, then stop the active instance and watch the standby take over —
+the QM survives, because that is the whole point of the arm.</p>
+<p>From there, the <a href="../architecture/">Architecture</a> page walks the
+higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN alternative.</p>
+<h2 id="watch-the-lab-live-observability">Watch the lab live (observability)<a class="headerlink" href="#watch-the-lab-live-observability" title="Permanent link">&para;</a></h2>
+<p>A dedicated <strong><code>obs</code></strong> VM runs <strong>Prometheus + Grafana</strong>, scraping <code>node_exporter</code>
+across the whole fleet over the host-only <strong><code>net-mgmt</code></strong> plane — the one network
+fault drills never sever, so the dashboard stays live exactly when something
+breaks. A second node, <strong><code>mon-probe</code></strong>, carries the data-net NICs for the MQ
+client exporters.</p>
+<p>Metrics are only half the picture. Every queue manager also ships <strong>MQ
+instrumentation events</strong> — authority failures, channel start/stop, queue-depth
+alarms, and the rest — as <code>json_compact</code> JSONL to journald (tag <code>mq-events</code>) via
+the shared <code>mq-event-monitor</code> role, standard on <strong>every</strong> QM. <strong>Alloy</strong> ships that
+stream to <strong>Loki</strong>, and Grafana surfaces the events alongside the metrics, so the
+boards show both what the fleet is <em>doing</em> (metrics) and what MQ is <em>reporting</em>
+(events).</p>
+<p>The observability stack is stood up <strong>as part of <code>mqlab bootstrap</code></strong> — its
+<code>observe</code> phase renders the scrape targets and dashboards from topology and
+provisions obs, the <code>mon-probe</code> exporter host and this stack's exporters. To bring the shared
+observability VMs up on their own (independently of any stack), use <code>mqlab
+commons up</code>. A few renders and the front door are exposed directly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">       </span><span class="c1"># print the Grafana URL + how to reach it from your workstation</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w">    </span><span class="c1"># render the Prometheus file_sd targets from topology + echo them</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">  </span><span class="c1"># render the Grafana dashboards (Watcher + per-stack cockpits)</span>
+</code></pre></div>
+<p><code>obs</code> is a guest inside the lab, reached on your host at <code>localhost:&lt;port&gt;</code>, where
+<code>&lt;port&gt;</code> is the host port your VM profile forwards in <code>vergil.toml</code> <code>port_forwards</code>
+(<code>3000</code> for <code>vergil-user</code>, <code>3001</code> for <code>anonymous</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>http://localhost:3000/d/lab-watcher   (vergil-user; anonymous — no login)
+</code></pre></div>
+<p>On a cloud (GCP) dev VM, browse the VM's external IP on the same port instead:
+<code>http://&lt;external-ip&gt;:3000/d/lab-watcher</code>, with the IP taken from <code>vrg-vm list</code>. No
+tunnel is needed. See
+<a href="../operate/#reaching-lab-services-from-your-workstation">Reaching lab services from your workstation</a>.</p>
+<p><code>mqlab obs open</code> prints the exact URLs for this VM, read from the installed
+port-forward relay. If a grafana restart wedged the forward, <code>mqlab obs relay-heal</code>
+re-heals it.</p>
+<p>A second telemetry tier, <strong>log search</strong> (single-node OpenSearch + Dashboards,
+fed by Data Prepper), gives the same log corpus a full-text, aggregation search
+surface alongside Grafana/Loki. It runs on the same <code>obs</code> node, so it comes up
+with the rest of observability, and you operate it with <code>mqlab logsearch</code>
+(<code>status</code>/<code>open</code>/<code>snapshot</code>/<code>restore</code>). A log document that OpenSearch rejects
+is never dropped silently: it lands in a bounded dead-letter file, shows on the
+Watcher, and fires a Prometheus alert. See
+<a href="../architecture/#the-log-search-tier-full-text-over-the-log-corpus-logsearch">Architecture</a>
+for the tier and <a href="../operate/#mqlab-logsearch-verbs">Operate &amp; Observe</a> for the verbs.</p>
+<p><strong>The Watcher</strong> (<code>lab-watcher</code>, #488) is the lab-state front door: a support-layer
+instrument strip (DNS/obs/probe/svc/app) plus a live/DR rollup row per stack, each
+drilling into its own cockpit board. Scrape targets are rendered from <strong>the full
+<code>topology.yaml</code></strong>, so <em>every</em> node is a target — a node that isn't running simply
+shows <strong>red (<code>up == 0</code>)</strong> rather than vanishing. That is deliberate: a missing
+thing you can see beats a missing thing you can't. The predecessor <strong>Fleet — Node
+Health</strong> board (<code>lab-fleet-node</code>) still renders a tile per node, at <code>/d/lab-fleet-node</code>.</p>
+<p><strong>mqweb is not the Watcher.</strong> The MQ <strong>admin REST API and Console</strong> (<code>mqweb</code>,
+<code>9443/HTTPS</code>) is a separate surface from the observability plane above. It is
+<strong>data-plane infrastructure</strong> co-located with each queue manager — reached at the
+QM's data-plane VIP (Pacemaker / RDQM) or the active instance's node IP (Native HA,
+which has no VIP) — <strong>not</strong> on the management / Watcher plane.
+<code>mqlab console open &lt;stack&gt;</code> finds a stack's live mqweb and prints the MQ Console
+URL and logins (see <a href="../operate/#using-the-mq-console">Using the MQ Console</a>).
+mqweb runs on
+every QM node by default (#1502); see the architecture page's admin-plane section.</p>
+<p>Because <code>bootstrap</code> already made every node a scrape target, a fault is something
+you can <em>watch</em>. Kill a live cluster node the same way the lab exposes every
+other step — by hand, with <code>virsh</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>virsh<span class="w"> </span>-c<span class="w"> </span>qemu:///system<span class="w"> </span>destroy<span class="w"> </span>lab_pcmk-a2<span class="w">   </span><span class="c1"># yank a node out from under the cluster</span>
+</code></pre></div>
+<p>That node's tile turns red within a scrape interval while Pacemaker refloats the
+QM elsewhere; bring it back (<code>mqlab bootstrap pcmk-ubuntu</code>, which resumes at the
+<code>vms</code> phase) and the tile turns green again. That live red↔green flip is the
+point — a fault you can <em>watch</em>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight", "search.suggest"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../js/resize-iframes.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,1915 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Reproducible nested-virtualization lab for IBM MQ HA and DR resiliency on Linux">
+      
+      
+      
+      
+        <link rel="prev" href="../mq-event-monitoring-guide/">
+      
+      
+        <link rel="next" href="../mq-tcp-config-guide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Metrics & monitoring configuration - MQ Resiliency Lab for Linux</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ibm-mq-metrics-monitoring-configuration-enable-data-for-a-collector" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-header__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MQ Resiliency Lab for Linux
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Metrics & monitoring configuration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Releases
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../methodology/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Methodology
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../operate/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operate & Observe
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../reference/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../develop/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Develop the lab
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../design-and-specs/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Design & Specs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-nav__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    MQ Resiliency Lab for Linux
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Releases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../releases/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Release Notes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../methodology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methodology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operate/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate & Observe
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operate & Observe
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/guest-components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide-standard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authoring standard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../_template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-json-logging-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON diagnostic logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-event-monitoring-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instrumentation event monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics & monitoring configuration
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics & monitoring configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-full-parameter-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Full parameter reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Alternatives and tradeoffs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix C: Complete configuration examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-tcp-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TCP configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-authorization-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & access control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nativeha-log-lifecycle-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native HA log lifecycle (runbook)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../develop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Develop the lab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design-and-specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design & Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-full-parameter-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Full parameter reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Alternatives and tradeoffs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix C: Complete configuration examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="ibm-mq-metrics-monitoring-configuration-enable-data-for-a-collector">IBM MQ metrics &amp; monitoring configuration — enable data for a collector<a class="headerlink" href="#ibm-mq-metrics-monitoring-configuration-enable-data-for-a-collector" title="Permanent link">&para;</a></h1>
+<ul>
+<li><strong>MQ version:</strong> 10.0.x (Multiplatforms) — re-pinned from 9.4 on 2026-10-15
+  (<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555">#1555</a>)</li>
+<li><strong>Status:</strong> Active</li>
+<li><strong>Last validated in lab:</strong> 2026-07-02 on MQ 9.4.5. Not yet re-validated live on
+  10.0.1.</li>
+<li><strong>IBM Docs re-checked:</strong> 2026-10-15 against 10.0.x. The <code>MON*</code>, <code>STAT*</code>,
+  <code>ACCT*</code> and <code>MAXHANDS</code> text in <em>ALTER QMGR</em> is unchanged from 9.4 (the 10.0
+  page's edits are to other attributes), and the monitoring topics read the same,
+  so no guide text changed.</li>
+<li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a>;
+  <a href="../nativeha-log-lifecycle-guide/">Native HA log lifecycle (runbook)</a> — the
+  log-health band that reads this lab's out-of-band <code>mqlab_log_*</code> collector metrics
+  alongside the exporter's queue-manager metrics</li>
+</ul>
+<hr />
+<h2 id="1-purpose-audience">1. Purpose &amp; audience<a class="headerlink" href="#1-purpose-audience" title="Permanent link">&para;</a></h2>
+<p>A metrics collector for IBM MQ — for example the IBM MQ Prometheus exporter
+(<code>mq-metric-samples</code>) — reads the queue manager's <strong>resource-monitoring</strong> and
+<strong>statistics</strong> publications. By default those publications are sparse: unless
+monitoring and statistics are enabled on the queue manager, a collector sees
+little beyond queue-manager-level basics, and per-queue and per-channel metrics
+are missing. This guide enables the right data at the source and keeps the
+per-object settings coherent so it actually flows. It is for anyone standing up
+metrics for IBM MQ.</p>
+<h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
+<p>In scope: the queue-manager attributes that turn on the data a collector consumes
+— online monitoring (<code>MONQ</code>, <code>MONCHL</code>), statistics (<code>STATMQI</code>, <code>STATQ</code>,
+<code>STATCHL</code>, <code>STATINT</code>), the per-object coherence that lets objects inherit those
+settings, and <code>MAXHANDS</code> headroom for a collector that opens many queue handles.</p>
+<p>Out of scope: deploying or configuring the collector itself (the exporter, the
+Prometheus scrape job). MQ's job is only to <em>emit</em> the data; the collector
+attaches its own scrape-side labels (queue-manager name, object name) — MQ does
+not. Attributes here are pinned to <strong>MQ 10.0.x Multiplatforms</strong>; z/OS has different
+class-switch semantics and ignores granularity.</p>
+<h2 id="3-recommendation">3. Recommendation<a class="headerlink" href="#3-recommendation" title="Permanent link">&para;</a></h2>
+<p>Enable a <strong>coherent baseline at the queue manager and let objects inherit it</strong>:</p>
+<ul>
+<li><strong>Monitoring</strong> <code>MONQ</code> and <code>MONCHL</code> at <strong><code>MEDIUM</code></strong> — IBM describes MEDIUM as a
+  moderate rate of data collection with limited effect on system performance. It
+  is the right default: <code>LOW</code> gives coarse, less-current data; <code>HIGH</code> adds
+  overhead that rarely pays off for time-series scraping.</li>
+<li><strong>Statistics</strong> <code>STATMQI(ON)</code>, <code>STATQ(ON)</code>, and <code>STATCHL(MEDIUM)</code>.</li>
+<li><strong>Leave queues and channels at <code>QMGR</code></strong> (the default) so they inherit the
+  queue-manager setting — one place to reason about, coherent across objects.</li>
+<li><strong>Raise <code>MAXHANDS</code></strong> if your collector opens a handle per queue; the default can
+  be too low for a collector plus normal application load.</li>
+</ul>
+<p>The strongest recommendation is this single coherent set rather than per-object
+tuning: uniform inheritance is easier to operate and to reason about, and it
+matches what a scraping collector expects. Per-object overrides are a scalpel for
+the rare queue you want at a different granularity (section 4).</p>
+<p>Statistics (<code>STAT*</code>) and monitoring (<code>MON*</code>) are <strong>complementary</strong>, not
+alternatives — enable both. Accounting (<code>ACCT*</code>) is a <strong>separate, heavier</strong> lever
+for per-application data and is <strong>not</strong> required for the exporter path; see
+<a href="#appendix-b-alternatives-and-tradeoffs">Appendix B</a>.</p>
+<h2 id="4-how-to-configure-it">4. How to configure it<a class="headerlink" href="#4-how-to-configure-it" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Queue manager — enable monitoring and statistics.</strong> Set the monitoring and
+   statistics attributes on the queue manager. Optionally set <code>STATINT</code> (seconds)
+   to tune how often statistics are written, and raise <code>MAXHANDS</code> for collector
+   headroom:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)
+</code></pre></div>
+<ol>
+<li><strong>Objects — keep them coherent by inheriting.</strong> Queues and channels default to
+   <code>QMGR</code> for their monitoring and statistics attributes, which means "use the
+   queue-manager setting." Leave them there and they inherit the baseline above.
+   Override an individual object only when you deliberately want a different
+   granularity — for example a hot queue at <code>HIGH</code>:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>ALTER QLOCAL(PAYMENTS.IN) MONQ(HIGH) STATQ(ON)
+</code></pre></div>
+<ol>
+<li><strong>Mind the <code>NONE</code> trap.</strong> At the queue-manager level, <code>OFF</code> disables collection
+   for objects that inherit (<code>QMGR</code>) but still lets an object override to on.
+   <code>NONE</code> disables collection for <strong>all</strong> objects <strong>regardless</strong> of their own
+   setting — an object-level override is ignored. Use <code>OFF</code>, not <code>NONE</code>, unless
+   you intend a hard off. See <a href="#appendix-a-full-parameter-reference">Appendix A</a>
+   for the exact value semantics.</li>
+</ol>
+<h2 id="5-verify-it-worked">5. Verify it worked<a class="headerlink" href="#5-verify-it-worked" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Confirm the attributes:</strong> display the queue manager's monitoring and
+  statistics attributes and check they hold the values you set (<code>MONQ</code>, <code>MONCHL</code>,
+  <code>STATMQI</code>, <code>STATQ</code>, <code>STATCHL</code>).</li>
+<li><strong>Confirm the data flows:</strong> after enabling, the queue manager's system
+  monitoring publications become populated where they were sparse before, and the
+  collector begins reporting per-queue and per-channel metrics (queue depth,
+  message rates, channel status) rather than only queue-manager-level values.</li>
+<li><strong>Confirm objects inherit:</strong> a queue left at <code>MONQ(QMGR)</code>/<code>STATQ(QMGR)</code> should
+  show data at the queue-manager granularity; one you overrode should reflect its
+  own value.</li>
+</ul>
+<h2 id="6-what-stays-caveats">6. What stays / caveats<a class="headerlink" href="#6-what-stays-caveats" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Granularity is a cost knob.</strong> <code>HIGH</code> monitoring increases collection overhead;
+  prefer <code>MEDIUM</code> for scraping. <code>STATINT</code> trades freshness against volume — a
+  shorter interval means more frequent, larger statistics writes.</li>
+<li><strong><code>NONE</code> overrides objects; <code>OFF</code> does not.</strong> A queue-manager <code>NONE</code> silently
+  defeats per-object overrides (section 4, step 3).</li>
+<li><strong><code>MAXHANDS</code> can throttle a collector.</strong> A collector that opens a handle per
+  queue, on top of application handles, can exhaust the per-connection handle
+  limit; raise <code>MAXHANDS</code>. General queue-manager limit tuning is its own topic —
+  this guide raises <code>MAXHANDS</code> only for the collector's sake.</li>
+<li><strong>MQ emits; the collector labels.</strong> Scrape-side identity (queue-manager name,
+  object name, cluster) is applied by the collector, not MQ. Keeping
+  queue-manager and object naming consistent across a fleet keeps those labels
+  coherent.</li>
+<li><strong>z/OS differs.</strong> On z/OS, statistics granularity is ignored and class switches
+  apply; this guide covers Multiplatforms.</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">How this lab implements it</p>
+<p>The exporter path above (the IBM MQ Prometheus exporter reading the monitoring
+and statistics publications this guide enables) is only one of the metric
+sources on the boards. For the <strong>Native HA</strong> arms the lab also runs a
+stdlib-only, <strong>out-of-band</strong> collector —
+<code>components/mq-resiliency-observability/src/mqro/loglifecycle.py</code>, deployed
+as <code>lab-loglifecycle-state</code> — that polls each instance's log filesystem (no
+MQI, so it is independent of MQ monitoring) and emits
+<code>mqlab_log_disk_used_bytes</code>, <code>mqlab_log_disk_total_bytes</code>,
+<code>mqlab_log_extents_active</code>, <code>mqlab_log_extents_inactive</code>, and
+<code>mqlab_log_sample_stale</code>, each labelled <code>{qm,instance,role}</code>. Prometheus scrapes
+these alongside the exporter metrics, and <code>src/mqlab/qmboard.py</code>
+(<code>_log_health_band</code>) assembles them into the per-queue-manager <strong>log-health
+band</strong>. How to read that band is the
+<a href="../nativeha-log-lifecycle-guide/">Native HA log-lifecycle runbook</a>
+(<code>logical-minds-foundry/.github#145</code>).</p>
+</div>
+<hr />
+<h2 id="appendix-a-full-parameter-reference">Appendix A: Full parameter reference<a class="headerlink" href="#appendix-a-full-parameter-reference" title="Permanent link">&para;</a></h2>
+<p>Queue-manager attributes (set with <code>ALTER QMGR</code>). Objects (<code>ALTER QLOCAL</code>,
+<code>ALTER CHANNEL</code>) take the same value plus <code>QMGR</code> to inherit, which is their
+default.</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Values (queue manager)</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MONQ</code></td>
+<td><code>OFF</code> / <code>NONE</code> / <code>LOW</code> / <code>MEDIUM</code> / <code>HIGH</code></td>
+<td>Online monitoring data collection for queues. <code>OFF</code>: off for <code>QMGR</code>-inheriting queues (override allowed). <code>NONE</code>: off for all queues regardless of their setting. <code>LOW</code>/<code>MEDIUM</code>/<code>HIGH</code>: on at that rate for <code>QMGR</code>-inheriting queues.</td>
+</tr>
+<tr>
+<td><code>MONCHL</code></td>
+<td><code>OFF</code> / <code>NONE</code> / <code>LOW</code> / <code>MEDIUM</code> / <code>HIGH</code></td>
+<td>Online monitoring data collection for channels; same <code>OFF</code>/<code>NONE</code>/level semantics as <code>MONQ</code>.</td>
+</tr>
+<tr>
+<td><code>STATMQI</code></td>
+<td><code>OFF</code> / <code>ON</code></td>
+<td>Collect MQI statistics for the queue manager.</td>
+</tr>
+<tr>
+<td><code>STATQ</code></td>
+<td><code>OFF</code> / <code>ON</code> / <code>NONE</code></td>
+<td>Statistics for queues. <code>ON</code>/<code>OFF</code>: on/off for queues set to <code>QMGR</code>. <code>NONE</code>: off for all queues regardless of their setting.</td>
+</tr>
+<tr>
+<td><code>STATCHL</code></td>
+<td><code>NONE</code> / <code>OFF</code> / <code>LOW</code> / <code>MEDIUM</code> / <code>HIGH</code></td>
+<td>Statistics for channels; required to collect channel accounting records.</td>
+</tr>
+<tr>
+<td><code>STATINT</code></td>
+<td><code>integer</code> (seconds)</td>
+<td>Interval at which statistics data is written to the monitoring queue.</td>
+</tr>
+<tr>
+<td><code>MAXHANDS</code></td>
+<td><code>integer</code></td>
+<td>Maximum open handles any one connection may hold at once. Raise for a collector that opens many queue handles.</td>
+</tr>
+</tbody>
+</table>
+<p>Object-level values: a queue's <code>MONQ</code> and <code>STATQ</code>, and a channel's <code>MONCHL</code> and
+<code>STATCHL</code>, each accept <code>QMGR</code> (inherit — the default) plus their own explicit
+values. Leaving objects at <code>QMGR</code> is what makes the queue-manager baseline
+coherent across them.</p>
+<h2 id="appendix-b-alternatives-and-tradeoffs">Appendix B: Alternatives and tradeoffs<a class="headerlink" href="#appendix-b-alternatives-and-tradeoffs" title="Permanent link">&para;</a></h2>
+<p><strong>Monitoring vs statistics — enable both, they answer different questions.</strong>
+Online <em>monitoring</em> (<code>MON*</code>) exposes current activity (e.g. current queue depth,
+last-get time, channel status). <em>Statistics</em> (<code>STAT*</code>) accumulate interval
+aggregates (message counts, byte counts) written every <code>STATINT</code>. A collector
+uses both; neither substitutes for the other.</p>
+<p><strong>Granularity — <code>LOW</code> vs <code>MEDIUM</code> vs <code>HIGH</code>.</strong> Higher granularity means
+more-current, finer data at higher collection cost. For periodic scraping,
+<code>MEDIUM</code> is the sweet spot; <code>HIGH</code> rarely improves a dashboard enough to justify
+the overhead; <code>LOW</code> can lag.</p>
+<p><strong>Accounting (<code>ACCT*</code>) — a heavier, separate lever, not needed here.</strong> Accounting
+produces per-connection and per-queue <em>accounting</em> records (<code>ACCTMQI</code>, <code>ACCTQ</code>,
+with <code>ACCTINT</code> interval and <code>ACCTCONO</code> to allow application override). It answers
+"which application did what," for chargeback or forensic per-app analysis — at
+materially higher cost than monitoring/statistics. The typical Prometheus exporter
+path does <strong>not</strong> consume accounting, so enable <code>ACCT*</code> only when you specifically
+need per-application data, independent of this guide's collector baseline.</p>
+<h2 id="appendix-c-complete-configuration-examples">Appendix C: Complete configuration examples<a class="headerlink" href="#appendix-c-complete-configuration-examples" title="Permanent link">&para;</a></h2>
+<p><strong>Queue-manager baseline</strong> (the coherent set a collector needs):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)
+</code></pre></div>
+<p><strong>Optional — tune the statistics write interval</strong> (default is queue-manager
+defined; shorten for fresher data at higher volume):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ALTER QMGR STATINT(30)
+</code></pre></div>
+<p><strong>Objects inherit by default</strong> — no per-object change is needed. To <em>override</em> a
+single hot queue to a higher granularity:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>ALTER QLOCAL(PAYMENTS.IN) MONQ(HIGH) STATQ(ON)
+</code></pre></div>
+<p><strong>Verify the queue-manager settings:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>DISPLAY QMGR MONQ MONCHL STATMQI STATQ STATCHL STATINT MAXHANDS
+</code></pre></div>
+<h2 id="appendix-d-troubleshooting">Appendix D: Troubleshooting<a class="headerlink" href="#appendix-d-troubleshooting" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Collector shows only queue-manager-level metrics, no per-queue/channel data</td>
+<td>monitoring/statistics not enabled</td>
+<td>set <code>MONQ</code>/<code>MONCHL</code>/<code>STATMQI</code>/<code>STATQ</code>/<code>STATCHL</code> on the queue manager</td>
+</tr>
+<tr>
+<td>A specific queue has no metrics despite the queue-manager baseline</td>
+<td>queue overridden to <code>OFF</code>, or queue-manager set to <code>NONE</code> (which overrides objects)</td>
+<td>set the queue back to <code>QMGR</code>, or change the queue-manager value from <code>NONE</code> to a level/<code>ON</code></td>
+</tr>
+<tr>
+<td>Metrics feel stale or too voluminous</td>
+<td><code>STATINT</code> too long or too short</td>
+<td>tune <code>STATINT</code> for the freshness/volume balance you want</td>
+</tr>
+<tr>
+<td>Collector fails opening queues / hits a handle limit</td>
+<td><code>MAXHANDS</code> too low for collector + application handles</td>
+<td>raise <code>MAXHANDS</code></td>
+</tr>
+<tr>
+<td>Queue-manager CPU rises after enabling</td>
+<td>granularity set to <code>HIGH</code></td>
+<td>lower <code>MONQ</code>/<code>MONCHL</code>/<code>STATCHL</code> to <code>MEDIUM</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
+<p>IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic was compared with
+its 9.4 counterpart):</p>
+<ul>
+<li><em>ALTER QMGR (alter queue manager settings)</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings</a>
+  (authoritative value domains for <code>MONQ</code>, <code>MONCHL</code>, <code>STATMQI</code>, <code>STATQ</code>,
+  <code>STATCHL</code>, <code>STATINT</code>, <code>MAXHANDS</code>, and the <code>ACCT*</code> attributes). The text for
+  those attributes is unchanged from 9.4 apart from line wrapping.</li>
+<li><em>ALTER queues (alter queue settings)</em> (object-level <code>MONQ</code> / <code>STATQ</code>) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-queues-alter-queue-settings">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-queues-alter-queue-settings</a></li>
+<li><em>Monitoring your IBM MQ network</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=performance-monitoring-your-mq-network">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=performance-monitoring-your-mq-network</a></li>
+<li><em>Real-time monitoring</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-real-time-monitoring">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-real-time-monitoring</a></li>
+<li><em>Accounting and statistics messages</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-accounting-statistics-messages">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-accounting-statistics-messages</a></li>
+<li><em>Accounting and statistics message format</em> (replaces the earlier pointer to a
+  topic titled "Structure of statistics and accounting messages"; no topic
+  has that title in the 9.4 table of contents, and this is the closest match) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-accounting-statistics-message-format">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-accounting-statistics-message-format</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight", "search.suggest"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../js/resize-iframes.js"></script>
+      
+    
+  </body>
+</html>

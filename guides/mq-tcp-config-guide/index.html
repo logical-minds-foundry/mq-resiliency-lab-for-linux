@@ -1,0 +1,2049 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Reproducible nested-virtualization lab for IBM MQ HA and DR resiliency on Linux">
+      
+      
+      
+      
+        <link rel="prev" href="../mq-metrics-config-guide/">
+      
+      
+        <link rel="next" href="../mq-authorization-guide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>TCP configuration - MQ Resiliency Lab for Linux</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ibm-mq-tcp-configuration-tuning-the-tcp-stanza-for-ha-and-performance" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-header__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MQ Resiliency Lab for Linux
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              TCP configuration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Releases
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../methodology/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Methodology
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../operate/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operate & Observe
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../reference/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../develop/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Develop the lab
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../design-and-specs/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Design & Specs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-nav__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    MQ Resiliency Lab for Linux
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Releases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../releases/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Release Notes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../methodology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methodology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../operate/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate & Observe
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operate & Observe
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/guest-components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest components
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide-standard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authoring standard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../_template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-json-logging-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON diagnostic logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-event-monitoring-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instrumentation event monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-metrics-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics & monitoring configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TCP configuration
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TCP configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-full-parameter-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Full parameter reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Full parameter reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-tcp-stanza-attributes-qmini-mqclientini" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 TCP stanza attributes (qm.ini / mqclient.ini)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-os-keepalive-timers-linux-sysctl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 OS keepalive timers (Linux sysctl)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Alternatives and tradeoffs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix B: Alternatives and tradeoffs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dead-peer-detection-layers-complementary-not-substitutes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dead-peer detection layers — complementary, not substitutes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix C: Complete configuration examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-authorization-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & access control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nativeha-log-lifecycle-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native HA log lifecycle (runbook)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../develop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Develop the lab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design-and-specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design & Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-full-parameter-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Full parameter reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Full parameter reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-tcp-stanza-attributes-qmini-mqclientini" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 TCP stanza attributes (qm.ini / mqclient.ini)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-os-keepalive-timers-linux-sysctl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 OS keepalive timers (Linux sysctl)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Alternatives and tradeoffs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix B: Alternatives and tradeoffs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dead-peer-detection-layers-complementary-not-substitutes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dead-peer detection layers — complementary, not substitutes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix C: Complete configuration examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="ibm-mq-tcp-configuration-tuning-the-tcp-stanza-for-ha-and-performance">IBM MQ TCP configuration — tuning the TCP stanza for HA and performance<a class="headerlink" href="#ibm-mq-tcp-configuration-tuning-the-tcp-stanza-for-ha-and-performance" title="Permanent link">&para;</a></h1>
+<ul>
+<li><strong>MQ version:</strong> 10.0.x (Multiplatforms) — re-pinned from 9.4 on 2026-10-15
+  (<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555">#1555</a>)</li>
+<li><strong>Status:</strong> Draft — pending review</li>
+<li><strong>Last validated in lab:</strong> 2026-07-02 on MQ 9.4.5 (config live in lab; guide
+  pending review). Not yet re-validated live on 10.0.1.</li>
+<li><strong>IBM Docs re-checked:</strong> 2026-10-15 against 10.0.x. Two 10.0 changes are
+  folded in: the client socket-buffer default (A.1) and the new MQTT buffer
+  attributes in the <code>qm.ini</code> <code>TCP</code> stanza (A.1).</li>
+<li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a>,
+  <a href="../mq-metrics-config-guide/">Metrics &amp; monitoring configuration</a></li>
+</ul>
+<hr />
+<h2 id="1-purpose-audience">1. Purpose &amp; audience<a class="headerlink" href="#1-purpose-audience" title="Permanent link">&para;</a></h2>
+<p>The <code>TCP</code> stanza in the queue manager's <code>qm.ini</code> (and the client's <code>mqclient.ini</code>)
+tunes how IBM MQ uses TCP/IP. Its highest-value use is <strong>fast dead-peer
+detection</strong> — so a client or channel blocked on a failed or fenced peer gives up
+quickly and fails over, instead of hanging — but the same stanza also governs
+listener backlog, connect timeouts, socket buffers, and whether plaintext is
+allowed at all. This guide is for anyone tuning MQ's TCP behaviour, especially for
+high availability.</p>
+<h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
+<p>In scope: the <code>qm.ini</code> / <code>mqclient.ini</code> <code>TCP</code> stanza attributes, and the
+<strong>OS-level TCP keepalive settings they depend on</strong> — because the two only work as
+a pair (section 3). Pinned to <strong>MQ 10.0.x Multiplatforms</strong>.</p>
+<p>Out of scope: TLS, ciphers, and certificate configuration — that is the Security
+guide's job; this guide covers the transport, not its encryption. Lab-specific
+values.</p>
+<h2 id="3-recommendation">3. Recommendation<a class="headerlink" href="#3-recommendation" title="Permanent link">&para;</a></h2>
+<p><strong>Headline — for HA, enable keepalive <em>and</em> tune the OS timers together.</strong> This is
+the single most important thing in this guide, and the part most often gotten
+wrong. Setting <code>KeepAlive=YES</code> in the <code>TCP</code> stanza only switches on the socket's
+<code>SO_KEEPALIVE</code> option — it does <strong>not</strong> set the timing. The actual keepalive
+schedule comes from the <strong>operating system</strong>, whose default idle time is commonly
+<strong>two hours</strong>. With the default, a client blocked in an MQI call against a peer
+that was fenced during a failover can hang for up to two hours before the dead
+connection is detected.</p>
+<p>So enable both:</p>
+<ul>
+<li><code>KeepAlive=YES</code> in the <code>TCP</code> stanza, and</li>
+<li>short OS keepalive timers. On Linux, <code>tcp_keepalive_time</code> (idle before the first
+  probe), <code>tcp_keepalive_intvl</code> (gap between probes), and <code>tcp_keepalive_probes</code>
+  (probes before the connection is declared dead). A tuning of 15 / 5 / 3, for
+  example, detects a dead peer in roughly 30 seconds instead of hours.</li>
+</ul>
+<p>Then, as needed:</p>
+<ul>
+<li><strong><code>Connect_Timeout</code></strong> — default <code>0</code> means <em>no</em> connect timeout. MQ connects over
+  nonblocking sockets and retries up to 20 times before reporting an error. On a
+  high-latency or loaded network, set a non-zero value so MQ waits over <code>select()</code>
+  for the socket to become ready, improving the odds a connect succeeds.</li>
+<li><strong><code>ListenerBacklog</code></strong> — default 100 on Linux. Raise it on a queue manager that
+  receives bursts of connections; if the backlog fills, TCP rejects the
+  connection, message channels go to <code>RETRY</code> and clients get
+  <code>MQRC_Q_MGR_NOT_AVAILABLE</code>. Note the OS may cap the effective backlog below what
+  you request.</li>
+<li><strong><code>SecureCommsOnly=YES</code></strong> — refuse plaintext connections (a queue manager with it
+  off logs a warning at start). Defense-in-depth for the transport; the actual TLS
+  setup lives in the Security guide.</li>
+<li><strong>Socket buffers (<code>SndBuffSize</code> / <code>RcvBuffSize</code>)</strong> — leave at <code>0</code> (OS-managed)
+  unless you have a <em>measured</em> reason to fix them. IBM warns that wrong values
+  hurt TCP performance. On the client side (<code>ClntSndBuffSize</code> /
+  <code>ClntRcvBuffSize</code> in <code>mqclient.ini</code>), MQ 10.0 changed the default: leave them
+  unset unless you have measurements (see A.1).</li>
+</ul>
+<h2 id="4-how-to-configure-it">4. How to configure it<a class="headerlink" href="#4-how-to-configure-it" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Queue manager — <code>qm.ini</code> <code>TCP</code> stanza.</strong> Add the attributes you need; the
+   stanza's values override the default channel attributes.</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="na">TCP</span><span class="o">:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">   </span><span class="na">KeepAlive</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">YES</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">   </span><span class="na">ListenerBacklog</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">4096</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">   </span><span class="na">Connect_Timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">30</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">   </span><span class="na">SecureCommsOnly</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">YES</span>
+</code></pre></div>
+<ol>
+<li><strong>Client — <code>mqclient.ini</code> <code>TCP</code> stanza.</strong> A client application detects a dead
+   peer on its <em>own</em> socket, so client-side keepalive matters for a blocked MQI
+   call:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="na">TCP</span><span class="o">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">   </span><span class="na">KeepAlive</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">YES</span>
+</code></pre></div>
+<ol>
+<li><strong>Operating system — keepalive timers (Linux).</strong> <code>KeepAlive=YES</code> uses these;
+   set them short for fast failover detection. As sysctl values (for example in
+   <code>/etc/sysctl.d/</code>):</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="na">net.ipv4.tcp_keepalive_time</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s">15</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="na">net.ipv4.tcp_keepalive_intvl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">5</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="na">net.ipv4.tcp_keepalive_probes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+</code></pre></div>
+<p><code>qm.ini</code> changes take effect on queue-manager restart; <code>mqclient.ini</code> is read when
+the client connects; sysctl changes apply when reloaded.</p>
+<h2 id="5-verify-it-worked">5. Verify it worked<a class="headerlink" href="#5-verify-it-worked" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Confirm the stanza:</strong> inspect <code>qm.ini</code> (or <code>mqclient.ini</code>) and confirm the
+  <code>TCP</code> stanza holds the attributes you set.</li>
+<li><strong>Confirm keepalive timing:</strong> confirm the OS keepalive timers are the short
+  values you set, not the multi-hour default.</li>
+<li><strong>Confirm the behaviour that matters:</strong> with a peer abruptly lost (fenced during
+  a failover drill), a blocked MQI call or channel should detect the dead
+  connection within your tuned window (tens of seconds) rather than hanging — that
+  end-to-end behaviour is the real test, not the config alone.</li>
+</ul>
+<h2 id="6-what-stays-caveats">6. What stays / caveats<a class="headerlink" href="#6-what-stays-caveats" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Keepalive timing is the OS's job.</strong> <code>KeepAlive=YES</code> without short OS timers is
+  the classic trap — it looks enabled but detects nothing useful for hours.</li>
+<li><strong>Client vs server.</strong> A client tunes <code>mqclient.ini</code> plus its own host's OS
+  timers; a queue manager tunes <code>qm.ini</code> plus its host's timers. Both ends matter.</li>
+<li><strong><code>ListenerBacklog</code> is capped by the OS.</strong> The effective backlog can be smaller
+  than requested (e.g. by <code>somaxconn</code>); raise the OS limit too if needed.</li>
+<li><strong><code>Connect_Timeout</code> default is no timeout.</strong> Leaving it <code>0</code> is fine on healthy
+  networks; set it where connects must not wait through the full retry sequence.</li>
+<li><strong>Buffer sizes are sharp.</strong> Fixing <code>SndBuffSize</code>/<code>RcvBuffSize</code> wrong degrades
+  throughput; prefer <code>0</code> (OS-managed) without measurements.</li>
+</ul>
+<hr />
+<h2 id="appendix-a-full-parameter-reference">Appendix A: Full parameter reference<a class="headerlink" href="#appendix-a-full-parameter-reference" title="Permanent link">&para;</a></h2>
+<h3 id="a1-tcp-stanza-attributes-qmini-mqclientini">A.1 <code>TCP</code> stanza attributes (<code>qm.ini</code> / <code>mqclient.ini</code>)<a class="headerlink" href="#a1-tcp-stanza-attributes-qmini-mqclientini" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Values / default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Port</code></td>
+<td>integer, default <code>1414</code></td>
+<td>Default TCP port for MQ sessions.</td>
+</tr>
+<tr>
+<td><code>KeepAlive</code></td>
+<td><code>NO</code> (default) / <code>YES</code></td>
+<td>Turn on <code>SO_KEEPALIVE</code> so TCP periodically checks the peer is alive; closes the channel if not. Timing is OS-controlled (A.2).</td>
+</tr>
+<tr>
+<td><code>ListenerBacklog</code></td>
+<td>integer, default 100 (Linux)</td>
+<td>Outstanding connection requests the listener may queue. Full backlog → connection rejected, channel <code>RETRY</code> / client <code>MQRC_Q_MGR_NOT_AVAILABLE</code>.</td>
+</tr>
+<tr>
+<td><code>Connect_Timeout</code></td>
+<td><code>0</code> (default, no timeout) / seconds</td>
+<td>Seconds MQ waits (over <code>select()</code>) for a nonblocking socket to become ready before connecting; <code>0</code> = rely on the 20-attempt retry.</td>
+</tr>
+<tr>
+<td><code>SndBuffSize</code> / <code>RcvBuffSize</code> (<code>qm.ini</code>)</td>
+<td><code>0</code> (OS-managed, default) / bytes</td>
+<td>TCP send/receive buffer sizes passed to the OS; MQ's fallback is 32768. Change with great care.</td>
+</tr>
+<tr>
+<td><code>ClntSndBuffSize</code> / <code>ClntRcvBuffSize</code> (<code>mqclient.ini</code>)</td>
+<td>not set (default) / <code>0</code> / bytes</td>
+<td>Client-end buffer sizes. <strong>Changed in MQ 10.0</strong> (see the note below the table): when not set, the client keeps the OS size if it is at least 32768 bytes and requests 32768 otherwise; <code>0</code> leaves sizing to the OS.</td>
+</tr>
+<tr>
+<td><code>MqttSndBuffSize</code> / <code>MqttRcvBuffSize</code> (<code>qm.ini</code>)</td>
+<td><code>0</code> (OS-managed, default) / bytes</td>
+<td><strong>New in the 10.0 topic.</strong> Buffer sizes for MQTT channels only. Not relevant unless you run MQ Telemetry.</td>
+</tr>
+<tr>
+<td><code>SecureCommsOnly</code></td>
+<td><code>NO</code> (default) / <code>YES</code></td>
+<td><code>YES</code> refuses plaintext connections (info message at start); <code>NO</code> allows them (warning at start).</td>
+</tr>
+<tr>
+<td><code>Library1</code></td>
+<td>Windows only</td>
+<td>Name of the TCP/IP sockets DLL (default <code>WSOCK32</code>).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>9.4 → 10.0 change: client socket-buffer default (data).</strong> The 9.4 client
+topic says of <code>ClntSndBuffSize</code> and <code>ClntRcvBuffSize</code>: <em>"If no value is set, then
+the IBM MQ default, 32768, is used. If the value is set as zero, the operating
+system defaults are used."</em>
+(<a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=mqclientini-tcp-stanza-client-configuration-file">9.4.x</a>).
+The 10.0 topic replaces that with: <em>"When creating a TCP/IP connection, the
+client queries the network layer for the current … buffer size … 32768 bytes or
+larger: the client lets the network layer manage the buffer size dynamically …
+less than 32768 bytes: the client requests the network layer to set the buffer
+size to 32768 bytes"</em>, and adds <em>"In previous releases, C clients had the same
+default value and behavior. Other clients had a default value of 32768 bytes."</em>
+(<a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mqclientini-tcp-stanza-client-configuration-file">10.0.x</a>).
+IBM's 10.0.0 change list states the aim: <em>"From IBM MQ 10.0.0, the behavior is
+the same for all clients"</em>, which <em>"generally results in greater throughput of
+messages"</em> (<a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_changed.html">What's changed in IBM MQ 10.0.0</a>).
+<em>Judgment:</em> the change mostly affects Java, JMS and .NET clients, which used to
+pin 32 KB. It strengthens this guide's existing advice to leave buffers unset or
+at <code>0</code> unless you have measurements. The <code>qm.ini</code> <code>SndBuffSize</code>/<code>RcvBuffSize</code>
+text is unchanged between 9.4 and 10.0.</p>
+<h3 id="a2-os-keepalive-timers-linux-sysctl">A.2 OS keepalive timers (Linux sysctl)<a class="headerlink" href="#a2-os-keepalive-timers-linux-sysctl" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>net.ipv4.tcp_keepalive_time</code></td>
+<td>Idle seconds before the first keepalive probe.</td>
+</tr>
+<tr>
+<td><code>net.ipv4.tcp_keepalive_intvl</code></td>
+<td>Seconds between probes.</td>
+</tr>
+<tr>
+<td><code>net.ipv4.tcp_keepalive_probes</code></td>
+<td>Unanswered probes before the connection is declared dead.</td>
+</tr>
+</tbody>
+</table>
+<p>Detection time ≈ <code>time + (intvl × probes)</code>. These govern the timing that
+<code>KeepAlive=YES</code> merely enables.</p>
+<h2 id="appendix-b-alternatives-and-tradeoffs">Appendix B: Alternatives and tradeoffs<a class="headerlink" href="#appendix-b-alternatives-and-tradeoffs" title="Permanent link">&para;</a></h2>
+<h3 id="dead-peer-detection-layers-complementary-not-substitutes">Dead-peer detection layers — complementary, not substitutes<a class="headerlink" href="#dead-peer-detection-layers-complementary-not-substitutes" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>TCP keepalive (this guide)</strong> catches a silently dead or fenced peer at the
+  socket layer, including a connection blocked mid-MQI-call. Its timing is OS-wide.</li>
+<li><strong>Channel keepalive/heartbeat (<code>KAINT</code>, <code>HBINT</code>)</strong> are MQSC channel attributes.
+  <code>HBINT</code> is the channel heartbeat; <code>KAINT</code> can set a per-channel keepalive
+  interval that overrides the OS value for that channel (requires <code>KeepAlive=YES</code>
+  in the <code>TCP</code> stanza). These give per-channel control on the queue-manager side,
+  where the OS-wide sysctl is a blunter instrument. See the references.</li>
+<li><strong>Application-level reconnect</strong> (client auto-reconnect) handles recovery once the
+  dead connection is detected; it does not shorten detection itself.</li>
+</ul>
+<p>A client blocked in an MQI call relies on its <em>own</em> socket's keepalive — which on
+the client side is OS-governed — so client-heavy topologies tune the OS timers;
+queue-manager-side channels can additionally use <code>KAINT</code>.</p>
+<p><strong>Socket buffers</strong> — <code>0</code> (OS auto-tuning) is the safe default; fixed sizes only
+pay off with measured evidence on a specific network path.</p>
+<h2 id="appendix-c-complete-configuration-examples">Appendix C: Complete configuration examples<a class="headerlink" href="#appendix-c-complete-configuration-examples" title="Permanent link">&para;</a></h2>
+<p><strong>Queue manager — <code>qm.ini</code> <code>TCP</code> stanza:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="na">TCP</span><span class="o">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">   </span><span class="na">KeepAlive</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">YES</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">   </span><span class="na">ListenerBacklog</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">4096</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">   </span><span class="na">Connect_Timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">30</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">   </span><span class="na">SecureCommsOnly</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">YES</span>
+</code></pre></div>
+<p><strong>Client — <code>mqclient.ini</code> <code>TCP</code> stanza:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="na">TCP</span><span class="o">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">   </span><span class="na">KeepAlive</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">YES</span>
+</code></pre></div>
+<p><strong>Operating system — short keepalive timers (Linux sysctl):</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="na">net.ipv4.tcp_keepalive_time</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s">15</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="na">net.ipv4.tcp_keepalive_intvl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">5</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="na">net.ipv4.tcp_keepalive_probes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+</code></pre></div>
+<h2 id="appendix-d-troubleshooting">Appendix D: Troubleshooting<a class="headerlink" href="#appendix-d-troubleshooting" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A blocked MQI call hangs for a very long time after a peer is fenced</td>
+<td><code>KeepAlive=NO</code>, or <code>KeepAlive=YES</code> but OS keepalive still at the multi-hour default</td>
+<td>set <code>KeepAlive=YES</code> <strong>and</strong> short OS keepalive timers (A.2)</td>
+</tr>
+<tr>
+<td>Connections rejected / channels in <code>RETRY</code> under connection bursts</td>
+<td><code>ListenerBacklog</code> too low, or OS backlog cap (<code>somaxconn</code>)</td>
+<td>raise <code>ListenerBacklog</code>, and the OS limit if needed</td>
+</tr>
+<tr>
+<td>Connects hang or fail on a lossy / high-latency network</td>
+<td>no connect timeout; relying on the full retry sequence</td>
+<td>set <code>Connect_Timeout</code> to a non-zero value</td>
+</tr>
+<tr>
+<td>Plaintext connections still accepted</td>
+<td><code>SecureCommsOnly=NO</code></td>
+<td>set <code>SecureCommsOnly=YES</code> (and configure TLS — Security guide)</td>
+</tr>
+<tr>
+<td>Throughput dropped after buffer tuning</td>
+<td><code>SndBuffSize</code>/<code>RcvBuffSize</code> fixed to a poor value</td>
+<td>revert to <code>0</code> (OS-managed) unless you have measurements</td>
+</tr>
+</tbody>
+</table>
+<h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
+<p>IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic was compared
+with its 9.4 counterpart, and the differences are noted in A.1):</p>
+<ul>
+<li><em>TCP stanza of the qm.ini file</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-tcp-stanza-file">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-tcp-stanza-file</a>
+  (authoritative for <code>Port</code>, <code>KeepAlive</code>, <code>ListenerBacklog</code>, <code>Connect_Timeout</code>,
+  <code>SndBuffSize</code>/<code>RcvBuffSize</code>, <code>SecureCommsOnly</code>). Same as 9.4 for every
+  attribute this guide uses; 10.0 adds <code>MqttSndBuffSize</code>/<code>MqttRcvBuffSize</code>.</li>
+<li><em>TCP stanza of the client configuration file</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mqclientini-tcp-stanza-client-configuration-file">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mqclientini-tcp-stanza-client-configuration-file</a>
+  (<code>KeepAlive</code>, <code>Connect_Timeout</code>, <code>ClntSndBuffSize</code>/<code>ClntRcvBuffSize</code>). The
+  client buffer default changed in 10.0 (A.1).</li>
+<li><em>Channel attributes for MQSC keywords (D-L)</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=attributes-channel-mqsc-keywords-d-l">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=attributes-channel-mqsc-keywords-d-l</a>
+  (<code>HBINT</code> heartbeat interval and <code>KAINT</code> keepalive interval, the per-channel
+  levers). Same as 9.4.</li>
+<li><em>Using the TCP/IP SO_KEEPALIVE option</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=linux-using-tcpip-so-keepalive-option">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=linux-using-tcpip-so-keepalive-option</a>
+  (<code>KeepAlive=yes</code> in <code>qm.ini</code>; the wait and retry timing is a kernel
+  tunable). Same as 9.4.</li>
+<li><em>What's changed in IBM MQ 10.0.0</em> —
+  <a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_changed.html">https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_changed.html</a>
+  ("Change to default TCP buffer size for IBM MQ clients").</li>
+<li>Your operating system's TCP keepalive documentation (<code>tcp_keepalive_time</code>,
+  <code>tcp_keepalive_intvl</code>, <code>tcp_keepalive_probes</code> on Linux).</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight", "search.suggest"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+        <script src="../../js/resize-iframes.js"></script>
+      
+    
+  </body>
+</html>
