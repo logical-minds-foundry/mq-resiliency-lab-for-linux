@@ -22,18 +22,17 @@ the var *value*, not scattered literals.
 | Cross-org CONNAME — our QM → the SVC counterparty | `svc_conn` in `site-*.yml`; `svc.conn` in `topology.yaml` | `10.60.0.50` | `svc-sim-ext.service.com` |
 | Our-side ext CONNAME — SVC → our Native-HA QM (3 instances) | `our_conn` in `site-nativeha*.yml` | `10.60.0.11-13(1414)` | `nha-ubuntu-a{1,2,3}-ext.client.com(1414)` (per arm) |
 | App data-plane CONNAME — Native-HA arms (3 instances) | `app_conn` in `site-nativeha*.yml` → `app-requester` role | `10.10.1.11-13(1414)` | `nha-ubuntu-a{1,2,3}-data-a.client.com(1414)` (per arm) |
-| App data-plane CONNAME — VIP arms (pcmk/rdqm) | `app_conn` (the stack VIP) | `10.10.1.200` / `10.10.1.100` | `pcmk-vip.client.com` / `rdqm-vip.client.com` |
-| App default/fallback CONNAME (site-A + site-B VIP) | `DEFAULT_CONN` in `components/mq-resiliency-clients/src/mqrc/app_requester.py` (was `clients/app_requester.py` before #1356) | `10.10.1.200(1414),10.10.2.200(1414)` | `pcmk-vip.client.com(1414),`**`pcmk-vip-b.client.com`**`(1414)` — ⚠ see gap 1 |
+| App data-plane CONNAME — VIP arm (RDQM) | `app_conn` (the stack VIP) | `10.10.1.100` | `rdqm-vip.client.com` |
 | DR-flow client CONNAME | `--conn` of `mq-dr-flow` (`components/mq-resiliency-clients/src/mqrc/dr_flow.py`; was `clients/dr_flow.py`) | (1 addr) | → FQDN (confirm target during C2) |
-| Partner-facing ext CONNAME (pcmk) | `our_conn` (pcmk/rdqm arms) | `10.60.0.10` (`vip_ext`) | `pcmk-vip-ext.client.com` |
 
-The "Current (IP)" column is the C1 snapshot. As built today, `DEFAULT_CONN` is
-already the FQDN pair `pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)`.
+The "Current (IP)" column is the C1 snapshot. As built today, the RDQM
+`app_conn` is the FQDN pair `rdqm-vip-a.client.com(1414),rdqm-vip-b.client.com(1414)`.
 The clients moved into the `mq-resiliency-clients` guest component in #1356
-(epic .github#294).
+(epic .github#294). The app requester no longer has a built-in default
+CONNAME: `--conn` is required, and each stack's unit passes its own.
 
-Note: the VIP itself is still **bound** by IP (Pacemaker `IPaddr2` / `rdqmint`
-floating IP) — only the CONNAME *to* the VIP becomes a name.
+Note: the VIP itself is still **bound** by IP (the `rdqmint` floating IP) — only
+the CONNAME *to* the VIP becomes a name.
 
 ## mqweb admin REST/Console endpoint — data-plane infrastructure (#39)
 
@@ -48,7 +47,7 @@ published address is on the data plane:
 
 | Stack | Published endpoint | Proposed FQDN |
 |---|---|---|
-| pcmk / RDQM | the QM's data-plane VIP `:9443`, **each site** (`vip` / `vip_b`) | `pcmk-vip-a/-b.client.com:9443` · `rdqm-vip-a/-b.client.com:9443` |
+| RDQM | the QM's data-plane VIP `:9443`, **each site** (`vip` / `vip_b`) | `rdqm-vip-a/-b.client.com:9443` |
 | Native HA (no VIP) | the **active** instance's `net-data` node IP `:9443`, runtime-resolved by the REST "follow the active" state probe (`mqlab.mqweb_probe`) | `nha-{ubuntu,rhel}-a{1,2,3}-data-a.client.com:9443` (candidate set) |
 | `svc-sim` (counterparty) | its `net-ext` address `:9443`, administered **lab-only** | `svc-sim-ext.service.com:9443` — outside "our data plane"; a real estate would not administer the counterparty's mqweb |
 
@@ -65,10 +64,9 @@ internal library `mqlab.mqweb_endpoints` (epic #39, task #537), used by
 |---|---|---|
 | Heartbeat `172.16.1-2.x` | `_*-cluster-ha.yml` `hb:`; Native HA `ReplicationAddress` | HA/replication fabric — must survive a DNS outage (minimal-dependency); the fault suite severs this plane |
 | Cross-site WAN replication `10.99.0.x` | `_*-dr-replication.yml` `peer_wan_addrs` | CRR/DR replication fabric |
-| SAN / DRBD / iSCSI `10.40.x` | `drbd-san`, iscsi roles | storage-replication fabric |
 | Observability | `mq-exporter`, `alloy` defaults; Prometheus scrape targets; mgmt `10.50.0.x` | the Watcher/observability plane is deliberately IP — admitted-unrealistic instrumentation (epic doctrine) |
 | Node addressing | `lab/topology.yaml` `nics:` | source of truth — the IPs are the definition FQDNs are *generated from*, not references to migrate |
-| VIP bindings | Pacemaker `IPaddr2`, `rdqmint -f` | the floating IP is an interface binding, not a name lookup |
+| VIP bindings | `rdqmint -f` | the floating IP is an interface binding, not a name lookup |
 
 Admin readability: where a fabric IP is kept, the host still gets its lab FQDN in
 `/etc/hosts` (B4), so an operator reading the config sees a name alongside the IP.
@@ -78,14 +76,14 @@ Admin readability: where a fabric IP is kept, the host still gets its lab FQDN i
 1. **Site-B VIP names — resolved.** At C1 the generator emitted a VIP name only
    for the site-A `qm.vip`, so a DR CONNAME could not name the site-B VIP. Since
    #496, `src/mqlab/dns.py` `_vips()` emits a name for each VIP a stack declares:
-   `<short>-vip-a` (`vip`), `<short>-vip-b` (`vip_b`), `<short>-vip-ext-a`
-   (`vip_ext`) and `<short>-vip-ext-b` (`vip_ext_b`), all in `client.com`. So
-   `pcmk-vip-b` (`10.10.2.200`), `rdqm-vip-b` (`10.10.2.100`) and `pdrbd-vip-b`
-   (`10.10.2.170`) resolve. Site-B instance addresses get `<host>-data-b` names
-   from their `net-data-b` NICs like any other plane. The VIP arms' `app_conn`
-   and `DEFAULT_CONN` name both sites' VIPs (`<short>-vip-a…,<short>-vip-b…`).
+   `<short>-vip-a` (`vip`) and `<short>-vip-b` (`vip_b`), in `client.com`. So
+   `rdqm-vip-b` (`10.10.2.100`) resolves. (The `vip_ext` names and the
+   Pacemaker-stack VIP names went with the since-removed `pcmk-ubuntu` and
+   `pcmk-drbd-ubuntu` stacks.) Site-B instance addresses get `<host>-data-b` names
+   from their `net-data-b` NICs like any other plane. The RDQM arm's `app_conn`
+   names both sites' VIPs (`<short>-vip-a…,<short>-vip-b…`).
 2. **Per-arm confirmation.** `our_conn`/`app_conn` are per-arm literals across all
-   four arms (nha-ubuntu, nha-rhel-crr, rdqm, pcmk); confirm each swapped FQDN matches
+   three arms (nha-ubuntu, nha-rhel-crr, rdqm); confirm each swapped FQDN matches
    a name the generator actually emits (spot-checked live for nha-ubuntu: `dig`
    resolves `nha-ubuntu-a2-data-a.client.com` → `10.10.1.12`).
 3. **`REVDNS` stays `ENABLED`** (QM default; already the case) — hostname

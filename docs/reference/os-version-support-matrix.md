@@ -3,7 +3,8 @@
 > Scope: IBM's support status for **IBM MQ 10.0 server, Native HA and RDQM** on
 > the two OS majors the multi-version OS-axis epic adds: **Ubuntu 26.04 LTS** and
 > **RHEL 10**. Also covered: the RHEL 10 point release to pin, and whether Ubuntu
-> 26.04 ships the cluster/SAN packages the lab's Ubuntu roles install. This is
+> 26.04 shipped the cluster/SAN packages the lab's Ubuntu Pacemaker roles
+> installed (those roles have since been removed; see §3.3). This is
 > spike **S2** (spec §5) and plan task **T0a** of epic
 > [logical-minds-foundry/.github#280](https://github.com/logical-minds-foundry/.github/issues/280)
 > (issue [#1271](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1271)).
@@ -312,8 +313,10 @@ made it the default once the cold-rebuild row passed (see "Decision (2026-10-14,
   which adds `rhel:10` to the catalog, an `rdqm-install`
   `vars/RedHat-10.yml`, an `mq-rdqm-rhel10` bake and a validation row.
 - **[judgment]** This follows the lab's position on RDQM: the lab supports RDQM
-  for as long as IBM does. RDQM and Pacemaker/DRBD remain counter-options for
-  completeness alongside Native HA, the strategic HA technology.
+  for as long as IBM does. RDQM remains a counter-option for completeness
+  alongside Native HA, the strategic HA technology. (When this was written, the
+  lab's open-source Pacemaker/DRBD stacks were counter-options too; they have
+  since been removed.)
 
 **Update (2026-10-13): unblocked, not yet enabled.**
 
@@ -522,79 +525,25 @@ made it the default once the cold-rebuild row passed (see "Decision (2026-10-14,
   supported on RHEL x86-64". The SPCR marks these footnotes `appliedToAll`. The Ubuntu 24.04 row lists RDQM under
   `serverUnsupportedComps`. (S-1)
 - **[judgment]** RDQM is unsupported on every Ubuntu release, so also on 26.04.
-  The lab has no Ubuntu RDQM stack. `pcmk-ubuntu` is a community Pacemaker cluster
-  around an ordinary MQ queue manager, not RDQM, so its IBM gate is the **MQ
-  server** cell, not this one.
+  The lab has no Ubuntu RDQM stack; its one Ubuntu stack, `nativeha-ubuntu`, is
+  gated by the **Native HA** cell, not this one.
 
 ### 3.3 Package availability on Ubuntu 26.04 (resolute)
 
-The lab's Ubuntu cluster/SAN roles install these packages:
-`ansible/roles/pcmk-cluster/tasks/install-Debian.yml`,
-`ansible/roles/drbd-san/tasks/install.yml` and
-`ansible/roles/iscsi-target/tasks/install-Debian.yml`.
+> **Historical.** This section checked the packages the lab's Ubuntu
+> Pacemaker/SAN roles (`pcmk-cluster`, `drbd-san`, `iscsi-target`) installed.
+> Those roles were removed with the `pcmk-ubuntu` and `pcmk-drbd-ubuntu` stacks
+> (#1733–#1735), so no retained stack depends on these packages. The full
+> package tables are in this file's git history and in
+> [`2026-10-os-axis-spike.md`](../reports/2026-10-os-axis-spike.md) §2. One
+> finding is still cited elsewhere:
 
-- **[data]** Published binaries from the Launchpad primary archive, as of
-  2026-10-03 (S-4). Each was checked on both `amd64` and `arm64`, with identical
-  results. Ubuntu 24.04 (`noble`) is shown for comparison:
-
-  | Binary package | resolute (26.04) version | Component / pocket | noble (24.04) version |
-  |---|---|---|---|
-  | `pacemaker` | `3.0.1-1ubuntu2` | main / Release | `2.1.6-5ubuntu2` |
-  | `pcs` | `0.12.1-2ubuntu3` | main / Release | `0.11.7-1ubuntu1` |
-  | `fence-agents-virsh` | `4.17.0-1ubuntu1` (`4.17.0-1ubuntu1.1` in Proposed) | main / Release | `4.12.1-2~exp1ubuntu4` |
-  | `drbd-utils` | `9.22.0-1.2build1` | main / Release | `9.22.0-1build1` |
-  | `targetcli-fb` | `1:3.0.1-0.1build1` | main / Release | `1:2.1.53-1ubuntu3` |
-  | `corosync` | `3.1.9-2ubuntu3` | main / Release | not checked |
-  | `resource-agents-base` | `1:4.17.0-1ubuntu2.1` | main / Updates | not checked |
-  | `resource-agents-extra` | `1:4.17.0-1ubuntu2.1` | **universe** / Updates | not checked |
-  | `linux-modules-extra-<kver>-generic` | **not published** | n/a | published (e.g. `linux-modules-extra-6.8.0-146-generic`) |
-
-- **[data]** The resolute GA kernel (`linux-generic`) is `7.0.0-14.14` (Release).
-  The current one is `7.0.0-38.38` (Updates). Launchpad reports
-  `linux-modules-extra-7.0.0-14-generic` and `linux-modules-extra-7.0.0-38-generic`
-  as not published on either architecture. (S-4)
-- **[data]** On resolute, `drbd.ko.zst`, `iscsi_target_mod.ko.zst` and the
-  `target_core_*.ko.zst` modules ship in the **base `linux-modules-<kver>-generic`**
-  package. The packages.ubuntu.com file lists for `linux-modules-7.0.0-14-generic`
-  (amd64) and `linux-modules-7.0.0-38-generic` (amd64 and arm64) contain
-  `/usr/lib/modules/<kver>/kernel/drivers/block/drbd/drbd.ko.zst`. On noble,
-  `drbd.ko.zst` is in `linux-modules-extra-6.8.0-146-generic`. (S-4)
-- **[judgment] (consequence for T8)** Every package the lab names is available
-  on 26.04 except one. The **`linux-modules-extra-*` package does not exist on
-  26.04**, and the DRBD and LIO target modules it supplied on 24.04 are in the
-  base modules package instead. `drbd-san` installs the kernel-modules package
-  named in its per-version vars file (since #1278, `vars/Ubuntu-24.yml` names
-  `linux-modules-extra-{{ ansible_facts['kernel'] }}`; it was spelled
-  `{{ ansible_kernel }}` when this entry was written, before #136), so T8 adds a `vars/Ubuntu-26.yml`
-  that names `linux-modules-<kver>`, which the box already carries. `pacemaker` moves a major version (2.1 → 3.0) and `pcs` moves
-  0.11 → 0.12. Expect role fix-ups there too. T8/V2 must prove this; it is not
-  established here.
-- **[data] Live guest check (T0b, [#1272](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1272)).**
-  In a booted `cloud-image/ubuntu-26.04` `20260927.0.0` guest (Ubuntu
-  26.04.1 LTS, kernel `7.0.0-34-generic`), after `apt-get update`,
-  `apt-cache policy` gave the same candidates on arm64
-  ([#1290](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1290))
-  and amd64
-  ([#1291](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1291)).
-  They agree with the archive metadata above:
-
-  | Package | Installed | Candidate (arm64 and amd64) |
-  |---|---|---|
-  | `pacemaker` | (none) | `3.0.1-1ubuntu2` |
-  | `pcs` | (none) | `0.12.1-2ubuntu3` |
-  | `fence-agents-virsh` | (none) | `4.17.0-1ubuntu1` |
-  | `drbd-utils` | (none) | `9.22.0-1.2build1` |
-  | `targetcli-fb` | (none) | `1:3.0.1-0.1build1` |
-  | `linux-modules-extra-7.0.0-34-generic` | no output (unknown to apt) | no output (unknown to apt) |
-
-  The absence of `linux-modules-extra` is deliberate on Canonical's side: the
-  kernel team deprecated it from the 6.15 development kernel (25.10 cycle), and
-  all modules now ship in `linux-modules`
+- **[data]** An offline `modinfo` of the amd64 `linux-modules-7.0.0-34-generic`
+  package shows in-tree DRBD **8.4.11**. On 26.04 the DRBD module ships in the
+  base `linux-modules-<kver>-generic` package; `linux-modules-extra-*` is not
+  published (S-4). Canonical's kernel team deprecated it from the 6.15
+  development kernel (25.10 cycle)
   ([Ubuntu Community Hub, 2025-07-28](https://discourse.ubuntu.com/t/kernel-development-release-cadence-and-deprecation-of-linux-modules-extra/65176)).
-  An offline `modinfo` of the amd64 `linux-modules-7.0.0-34-generic` package
-  shows in-tree DRBD **8.4.11** and the LIO target modules. A load check inside a
-  booted guest, on both architectures, is left to T6/T8. Full detail:
-  [`2026-10-os-axis-spike.md`](../reports/2026-10-os-axis-spike.md) §2.
 
 ## 4. Defaults decision (spec §4.1)
 
@@ -614,11 +563,10 @@ decision never edits `ibm_support`, which stays IBM's word.
 | Stack | Spec goal default | Gating cell | Decision |
 |---|---|---|---|
 | `nativeha-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × Native HA = unsupported (not listed) | **Default `ubuntu:26` by lab decision** ([#1285](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1285), 2026-10-14), ahead of IBM. `ibm_support` stays `unsupported` and bootstrap warns. `ubuntu:24` stays selectable. |
-| `pcmk-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × MQ server = unsupported (not listed) | **Default `ubuntu:26` by lab decision** ([#1285](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1285), 2026-10-14), ahead of IBM. `ibm_support` stays `unsupported` and bootstrap warns. `ubuntu:24` stays selectable. |
 | `nativeha-rhel-crr` | `rhel:10` | RHEL 10 × Native HA = supported | **Flipped to `rhel:10`** (T11, [#1289](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1289)) after V3 proved the build ([#1288](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1288): cold full-DR bootstrap in one pass). Pin point `10.2`. A host without x86-64-v3 is refused and pointed at `os: rhel:9`. |
 | `rdqm-rhel` | `rhel:10` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Flipped to `rhel:10`** ([#1473](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473)) on the 10.0.1.0 pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)), after the cold-rebuild row passed ([#1475](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475#issuecomment-6172965786)). `rhel:10` was made selectable in [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440); `rhel:9` stays selectable. The support citation is AD26-0859 and the kernel-modules page; the SPCR has no 10.0.1 row yet (§2.4). A host without x86-64-v3 is refused and pointed at `os: rhel:9`. |
 
-- **[data]** For both Ubuntu stacks, the "IBM-supported" condition is **not met**:
+- **[data]** For the Ubuntu stack, the "IBM-supported" condition is **not met**:
   re-checked 2026-10-14, the MQ 10.0 and 10.0.0.5 SPCRs still list only Ubuntu
   24.04 LTS, and the deliverable chain has no 10.0.1 entry yet (§6.1).
 - **[judgment] Why the lab flips anyway** (human decision, #1285, 2026-10-14). The
@@ -646,7 +594,8 @@ decision never edits `ibm_support`, which stays IBM's word.
   The epic should decide it explicitly before T8 moves infra to 26.
   **Resolved** ([.github#285](https://github.com/logical-minds-foundry/.github/issues/285)):
   the catalog splits the shared nodes. `infra:` (`ubuntu:26`) covers only the
-  nodes that run no MQ (`infra`, `obs`, `san`). A separate `infra_mq:` key covers
+  nodes that run no MQ (`infra`, `obs`; `san` too, until the Pacemaker/SAN
+  stack was removed). A separate `infra_mq:` key covers
   the MQ commons and is support-gated like a stack default.
   **Superseded** (#1285, 2026-10-14): `infra_mq:` is now `ubuntu:26` under the same
   recorded lab decision as the Ubuntu stack defaults, so the MQ commons run 26.04

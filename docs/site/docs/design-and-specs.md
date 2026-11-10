@@ -28,7 +28,8 @@ how it was built. They live in-repo under `docs/specs/`, `docs/plans/`, and
 - **[Phase C RDQM findings](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reports/2026-06-06-phase-c-rdqm-findings.md)**
   — RDQM cluster formation and fault-drill results.
 - **[Phase D Pacemaker findings](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reports/2026-06-07-phase-d-pacemaker-findings.md)**
-  — the Pacemaker/SAN arm findings.
+  — the Pacemaker/SAN arm findings (the arm itself was removed in epic
+  [.github#399](https://github.com/logical-minds-foundry/.github/issues/399)).
 - **[MQ diagnostic logging in JSON — a research study](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reports/2026-06-19-mq-json-logging-research.md)**
   — every way MQ 9.4 emits JSON-format diagnostic logs (server/system/client +
   mqweb), the full text-log surface, and the JSON-only ingestion decision (#282).

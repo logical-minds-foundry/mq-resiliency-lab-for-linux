@@ -2,7 +2,7 @@
 
 This page is the **how** — how to *run* the lab and *watch* it. It sits at
 operational altitude: the commands you type against a live stack and the boards
-you watch them on. For the **why** — the shape of the lab, the four arms, and the
+you watch them on. For the **why** — the shape of the lab, the three arms, and the
 reasoning behind each HA/DR mechanism — read [Architecture](../architecture/index.md)
 first; everything below assumes that mental model. The code the lab runs on its
 guests (the collectors, clients and benchmark) and the `mqlab component` verbs that
@@ -11,12 +11,11 @@ build and reinstall it are on [Guest components](guest-components.md).
 Every verb here is stack-dispatched: you name a **stack** and `mqlab` resolves
 the right mechanism-specific action from
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml).
-The four stack names are:
+The three stack names are:
 
 | Stack | Mechanism | OS | App queue manager |
 |---|---|---|---|
 | `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL 10 (RHEL 9 selectable) | `RDQMAPP` |
-| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu 26.04, IBM-unsupported (24.04 selectable) | `PCMKAPP` |
 | `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL 10 (RHEL 9 selectable) | `NHARCAPP` |
 | `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu 26.04, IBM-unsupported (24.04 selectable) | `NHAUAPP` |
 
@@ -36,9 +35,7 @@ mqlab status                      # topology joined with live virsh state
 `--from <phase>` / `--only <phase>` force or narrow it. `--no-dr` brings up the
 **HA site only** — it skips the stack's DR-site guests (its `dr_groups`) and the
 DR provisioning for a lighter footprint under load, and is stateless (re-run
-without it to add DR over the live HA site). For the Pacemaker/SAN stack the
-shared-storage peer stays up to keep its DRBD mirror intact, so `--no-dr` there
-drops the DR *cluster* nodes rather than the whole of site B. Observability comes up
+without it to add DR over the live HA site). Observability comes up
 with `mqlab commons up` (it provisions the `obs` guest), so the Watcher is
 already live before the first stack lands. Tear a stack down with
 `mqlab teardown <stack>` (shared commons are reclaimed when the last stack exits).
@@ -116,7 +113,7 @@ is the traffic a failover drill perturbs and the Watcher measures.
 app-client                     our HA queue manager            svc-sim
 ┌─────────────────┐  APP.SVRCONN  ┌──────────────┐  distributed  ┌──────────────────────┐
 │ mq-app-requester │ ────────────▶ │  app QM      │   queuing     │ SVCQM                │
-│                 │               │ (e.g. PCMKAPP)│ ────────────▶ │  <SHORT>.SVC.REQUEST │
+│                 │               │ (e.g. NHAUAPP)│ ────────────▶ │  <SHORT>.SVC.REQUEST │
 │                 │ ◀──────────── │              │  (net-ext)    │        │             │
 └─────────────────┘   APP.REPLY   └──────────────┘               │        ▼             │
                                                                  │ mq-svc-responder@… │
@@ -125,15 +122,15 @@ app-client                     our HA queue manager            svc-sim
 
 - **Requester (Business A).** The `mq-app-requester` systemd unit on `app-client`
   drives an always-on request/reply stream (fixed-rate, `APP.SVRCONN`) at the app
-  queue manager's **data-plane address** — the floating VIP on the RDQM and
-  Pacemaker arms, or the active-instance CONNAME list on the Native HA arms (which
-  have no VIP). It publishes a node-exporter round-trip metric
+  queue manager's **data-plane address** — the floating VIP on the RDQM arm, or
+  the active-instance CONNAME list on the Native HA arms (which have no VIP). It
+  publishes a node-exporter round-trip metric
   (`app_roundtrip_total`, `app_roundtrip_failures_total`, `app_roundtrip_latency_ms`)
   and logs each round trip to journald → Loki.
 - **Responder (Business B / SVC).** One shared `SVCQM` on `svc-sim` hosts each
   stack's own `<SHORT>.SVC.REQUEST` queue, serviced by a per-stack
   `mq-svc-responder@<SHORT>.SVC.REQUEST` instance (e.g.
-  `mq-svc-responder@PCMK.SVC.REQUEST`). Per-stack queues keep the always-on
+  `mq-svc-responder@NHAU.SVC.REQUEST`). Per-stack queues keep the always-on
   streams independent — a stuck responder affects only its own stack.
 
 To fire a bounded burst by hand, run `mqlab qm e2e`. Every request must round-trip
@@ -150,7 +147,7 @@ always-on requester is deployed with, so nothing is typed by hand:
 - **QM** is the stack's app queue manager, `<SHORT>APP` (for example `NHAUAPP`).
 - **CONN** is the `app_conn` that the stack's provision playbook passes to
   `site-distributed-shared.yml`. That is the site-A instance list on the Native HA
-  stacks and the VIP FQDNs on the Pacemaker and RDQM stacks.
+  stacks and the VIP FQDNs on the RDQM stack.
 - **TLS** uses the `app-requester` role's keystore stem (`/home/vagrant/ssl/key`) and
   certificate label.
 
@@ -172,14 +169,13 @@ mqlab qm reload <stack>    # restart the active QM, telling clients to reconnect
 ```
 
 What each verb runs is per-mechanism (all from the stack's topology `verbs:`):
-Pacemaker disables/enables the `mq_group` resource (`pcs`), RDQM runs
-`endmqm -w` / `strmqm`, and Native HA stops/starts the `mqmonitor@` unit so the
+RDQM runs `endmqm -w` / `strmqm`, and Native HA stops/starts the `mqmonitor@` unit so the
 raft group elects a new leader.
 
 On the two Native HA stacks, `qm status` runs `dspmq -o nativeha -x` on the first
 node of each site: site A shows the Live group and site B the Recovery group, each
 with its own quorum and instance sync. If site B is not running (`bootstrap
---no-dr`), its query is skipped with a note instead of failing. RDQM and Pacemaker
+--no-dr`), its query is skipped with a note instead of failing. RDQM's
 `qm status` runs on site A only; for RDQM, `rdqmstatus` there already shows the DR
 relationship.
 
@@ -195,7 +191,6 @@ path for the arm:
 |---|---|---|
 | Native HA | `systemctl reload mqmonitor@<QM>` (MQ 10.0.1+), then waits until `dspmq -o nativeha -x` shows full quorum, one Active, and every instance in sync | [Monitoring, restarting, and ending queue manager instances](https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/monitoring_nativeHA.html): "the equivalent of using the endmqm -r command" |
 | RDQM | `endmqm -r -tp 29 -w <QM>`, then `strmqm <QM>`, on the RDQM's primary node; waits until `dspmq` shows `STATUS(RUNNING)` | [Starting, stopping, and displaying the state of a DR/HA RDQM](https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/q133988_.html): "All other endmqm parameters can be used when stopping an RDQM" |
-| Pacemaker | refused, with the reason | — |
 
 The `-r` meaning comes from the
 [endmqm reference](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-endmqm-end-queue-manager).
@@ -206,11 +201,6 @@ Replica. The playbook reports which instance is Active afterwards.
 `mqmonitor.py` reports a failed `endmqm` in its log but still exits 0, so the
 playbook also reads the `mqmonitor` journal and fails unless it says the
 instance stopped.
-
-Pacemaker is refused because it manages the queue manager through a systemd
-resource whose stop is `endmqm -w`, with no `-r`. A Pacemaker restart therefore
-never tells clients to reconnect. An `endmqm -r` run behind Pacemaker's back is
-a resource failure that Pacemaker recovers, not a planned restart.
 
 Each step (the restart, then the wait for the queue manager) is bounded by
 `--timeout` seconds (default 300). The run fails non-zero if a step goes past it,
@@ -235,7 +225,6 @@ fault scripts (run on the host, not through `mqlab`):
   (`lab/scripts/net-state-publish.sh`, `sudo` for the drop-zone write). There is
   no polling probe: the lab's virtual networks only change when these scripts
   (or bring-up) change them (#1253).
-- `lab/scripts/drbd-degrade.sh` — degrade DRBD replication for a forced-DR drill.
 
 Watch any drill on the stack's **cockpit** board and the **lab-watcher** front
 door (see [The Watcher](#the-watcher)).
@@ -269,21 +258,9 @@ before the cut and asserts it is present at the peer afterward — the survival
 assertion behind the DR framing. It is accepted **only** for a stack whose DR
 verb declares `rpo0: true` (it implements the seed and the verify). On any other
 stack `mqlab dr` refuses with exit 2 and runs nothing — it never cuts over
-without the check you asked for. Today that is `rdqm-rhel` and `pcmk-drbd-ubuntu`.
-
-`pcmk-drbd-ubuntu` declares `ansible/site-pdrbd-dr-switch.yml`, an RDQM-style DR
-demote then promote: it moves only the DR clone's `target-role` and the
-`pdrbd:<qm>-dr-role` marker, leaving each site's HA clone running. Before it changes
-anything, it checks that the target's DR disk is UpToDate and connected to an UpToDate
-source. If not, it refuses and the source keeps serving. It checks again after the
-source demote. If that second check fails, it says the source was demoted and prints
-the command that re-promotes it.
-A forced DR after losing the source site is a manual run with `-e dr_force=true`,
-which accepts an RPO above zero and so refuses `--rpo0-drill`.
+without the check you asked for. Today that is `rdqm-rhel`.
 
 !!! note "Per-arm DR coverage as-built"
-    The **Pacemaker/SAN** arm (`pcmk-ubuntu`) declares no DR verb, so
-    `mqlab dr` refuses it; it cuts over through `lab/scripts/pcmk-dr-cutover.sh`.
     The **Native HA** arms (`nativeha-rhel-crr`, `nativeha-ubuntu`) declare their
     CRR switchover playbook (`ansible/site-nativeha-switchover.yml` /
     `…-ubuntu-switchover.yml`) as their DR verbs, so `mqlab dr cutover <stack>`
@@ -333,7 +310,7 @@ the live dashboards.
 it measures the commit cost of Native HA replication (async CRR versus strict) on
 `NHARCAPP` or `NHARIAPP`. Provisioning a Native HA stack renders the wrapper
 `/home/vagrant/mq-bench` on `app-client`, with that stack's QM, CONNAME and TLS
-defaults in front of the entry point. RDQM and Pacemaker stacks leave the wrapper
+defaults in front of the entry point. The RDQM stack leaves the wrapper
 alone. Arguments you pass are appended after the defaults, so a later `--qm` or
 `--offered-rate` wins:
 

@@ -1,7 +1,9 @@
-# Lab Gotchas Playbook (libvirt / Vagrant / Pacemaker)
+# Lab Gotchas Playbook (libvirt / Vagrant / MQ HA)
 
-> Symptom → cause → fix, from direct experience. The Pacemaker entries extend
-> the Phase D findings; the libvirt/Vagrant/worktree ones are new from #67.
+> Symptom → cause → fix, from direct experience. The libvirt/Vagrant/worktree
+> entries are new from #67. Some entries were first seen on the open-source
+> Pacemaker/SAN stack (`pcmk-ubuntu`), since removed from the lab; they say so
+> where the lesson still applies to the retained stacks.
 
 ## Contents
 
@@ -13,7 +15,6 @@
 - [Driving the lab from a worktree](#driving-the-lab-from-a-worktree)
 - [build/ artifacts missing in a worktree](#build-artifacts-missing-in-a-worktree)
 - [Ansible silently does nothing (empty inventory)](#ansible-silently-does-nothing-empty-inventory)
-- [Pacemaker operational settings that matter](#pacemaker-operational-settings-that-matter)
 - [RDQM DR cold-create: crtmqm mkfs I/O error on the DR device](#rdqm-dr-cold-create-crtmqm-mkfs-io-error-on-the-dr-device)
 - [RDQM bake: kmod WARNING or "Unsupported kernel release"](#rdqm-bake-kmod-warning-or-unsupported-kernel-release)
 - [Bake fails "No space left on device" unpacking into /tmp](#bake-fails-no-space-left-on-device-unpacking-into-tmp)
@@ -22,23 +23,25 @@
 
 ## Vagrant leaves orphaned extra-disk volumes
 
-**Symptom.** `vagrant up san-a` fails: `storage volume 'lab_san-a-vdb.qcow2'
-exists already`. Then after deleting that, `Volume for domain is already created.
-Please run 'vagrant destroy' first`.
+**Symptom.** `vagrant up <node>` on a node with an `extra_disk` fails:
+`storage volume 'lab_<node>-vdb.qcow2' exists already`. Then after deleting that,
+`Volume for domain is already created. Please run 'vagrant destroy' first`. (First
+seen on `san-a` of the since-removed Pacemaker/SAN stack; today the nodes with an
+`extra_disk` are the RDQM nodes, whose `/dev/vdb` holds the `drbdpool` VG.)
 
 **Cause.** `vagrant destroy` removes the main domain disk but **not** the
-`extra_disk` qcow2 (the SAN's `/dev/vdb`), and a half-failed `up` leaves the main
+`extra_disk` qcow2 (the node's `/dev/vdb`), and a half-failed `up` leaves the main
 volume too.
 
 **Fix.** Clear every `lab_<node>*` volume, then up:
 ```sh
-vagrant destroy -f san-a
-for v in $(virsh -c qemu:///system vol-list --pool default | awk '/lab_san-a/{print $1}'); do
+vagrant destroy -f rdqm-a1
+for v in $(virsh -c qemu:///system vol-list --pool default | awk '/lab_rdqm-a1/{print $1}'); do
   virsh -c qemu:///system vol-delete "$v" --pool default
 done
-vagrant up san-a
+vagrant up rdqm-a1
 ```
-Generalize the `awk` filter to `lab_(san-|pcmk-|app-client)` for a full arm wipe.
+Generalize the `awk` filter to `lab_(rdqm-|app-client)` for a full arm wipe.
 
 ## Concurrent same-box boot trips a Vagrant machine lock
 
@@ -88,8 +91,11 @@ Details: [`perf-and-staging.md` §5.1](../development/perf-and-staging.md#51-hug
 **Symptom.** A healthy, idle stack starts misbehaving on its own, with nothing
 driving it:
 
-- Pacemaker fences nodes. Corosync logs `Corosync main process was not scheduled
-  for N ms` and `token timed out`.
+- Corosync logs `Corosync main process was not scheduled for N ms` and
+  `token timed out`. In #1602 this was on the since-removed Pacemaker/SAN stack,
+  where Pacemaker then fenced nodes. RDQM also runs on Corosync but sets
+  `stonith-enabled=false`, so it does not fence; (judgment) expect the same
+  Corosync warnings there.
 - Native HA fails over. Replicas log `AMQ3247W` ("active instance … has not sent
   anything"), and the active instance logs slow log writes (`AMQ6729W`) and
   `AMQ6176W`.
@@ -117,12 +123,13 @@ those two signatures and fails loud, naming the guests and the window. Narrow it
 to the incident with `--since` (journalctl syntax, for example
 `--since "2026-10-17 11:00"` or `--since "30 min ago"`). The kernel reports a soft
 lockup only after about 20 s, so the check catches the severe freezes. Shorter ones
-(corosync's 3.65 s token is enough to fence) show only as the corosync and
+(the Pacemaker/SAN stack's 3.65 s corosync token was enough to fence) show only
+as the corosync and
 `AMQ3247W` warnings above, which usually come alongside severe ones.
 
 **Fix.** Free host CPU. On macOS, stop or idle the other VMs and heavy apps while
 a lab stack is up. Then re-check a fresh window with
-`mqlab vm starvation --since "10 min ago"`. The lab recovers by itself: fenced
+`mqlab vm starvation --since "10 min ago"`. The lab recovers by itself: cluster
 nodes rejoin, Native HA resyncs. Re-run or resume whatever was interrupted
 (`mqlab bootstrap <stack> --from <phase>`). Treat a result taken during
 starvation, such as a timing, a failover count or a validation run, as void
@@ -160,9 +167,10 @@ fix — one shared, discoverable state location — is #69.)
 ## build/ artifacts missing in a worktree
 
 **Symptom.** Provisioning from a worktree fails: `Could not find or access
-'<worktree>/ansible/../build/fence_key'` (also the MQ install tarball). One
-missing file cascades: `pcmk-stonith` fails → the host is marked failed →
-`mq-install` is skipped → no `mqm` user → QM-create's `chown mqm` fails.
+'<worktree>/ansible/../build/<file>'` (the MQ install tarball, for example). One
+missing file cascades. As first seen on the since-removed Pacemaker/SAN stack, a
+missing `build/fence_key` failed `pcmk-stonith` → the host was marked failed →
+`mq-install` was skipped → no `mqm` user → QM-create's `chown mqm` failed.
 
 **Cause.** `build/` is host-mounted into the main checkout and **gitignored**, so
 it's never in a worktree; ansible resolves these paths relative to the worktree.
@@ -180,30 +188,21 @@ Proper fix: #69 (one shared lab-state location covering vagrant state + `build/`
 ## Ansible silently does nothing (empty inventory)
 
 **Symptom.** A scripted cutover prints every step and "complete", but nothing
-changed (no LUN, QM not running on the peer).
+changed (no LUN, QM not running on the peer). First seen with the cutover
+script of the since-removed Pacemaker/SAN stack.
 
 **Cause.** Two compounding bugs: (1) the script masked every command with
 `|| true` and printed success unconditionally; (2) the worktree's
-`build/inventory.ini` was never generated, so ansible had **zero target hosts** —
+Ansible inventory was never generated, so ansible had **zero target hosts** —
 every `run <group> ...` was a no-op.
 
 **Fix.** Regenerate the inventory from the operating checkout, and make scripts
 fail loud:
 ```sh
-bash ansible/inventory.sh        # reads `vagrant status` from ../lab -> ../build/inventory.ini
+uv run mqlab vm inventory     # renders build/work/inventory.ini from lab/topology.yaml
 ```
 Verify an **end state** (e.g. `dspmq` shows `STATUS(Running)` on the peer) and
 exit non-zero otherwise — never trust per-step `|| true`.
-
-## Pacemaker operational settings that matter
-
-| Setting | Why (symptom it prevents) |
-|---|---|
-| `resource-stickiness=1000` | without it the group auto-fails-back to a recovered node; that controlled move-back runs `endmqm` and **disconnects reconnected clients** |
-| `no-quorum-policy=suicide` | makes a quorum-loss (heartbeat sever) an **abrupt self-fence** instead of a graceful `endmqm -w` — so clients ride it via auto-reconnect like a crash |
-| `op monitor ... OCF_CHECK_LEVEL=20 on-fail=fence` on `mq_fs` | a real read/write probe catches a **dead SAN**; the default mount-table check is a ~12-minute blind spot (an idle QM generates no I/O to notice the dead disk) |
-| planned move = location constraint → verify → remove | this `pcs` version's `resource move` porcelain raced our migrations and **reverted** them |
-| `fence_virsh` needs `LIBVIRT_DEFAULT_URI=qemu:///system` | STONITH SSHes to the hypervisor (`build/fence_key`); without the URI the fence exec fails |
 
 ## `runmqakm` fails (`libicuio`) on a minimal RHEL box — install `libicu`
 

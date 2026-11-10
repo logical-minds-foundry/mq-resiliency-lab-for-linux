@@ -80,15 +80,10 @@ The candidates, derived from topology:
 
 | Stack | QM | Site-A endpoint | Site-B endpoint |
 |---|---|---|---|
-| `pcmk-ubuntu` (VIP) | PCMKAPP | `https://10.10.1.200:9443` | `https://10.10.2.200:9443` |
 | `rdqm-rhel` (VIP) | RDQMAPP | `https://10.10.1.100:9443` | `https://10.10.2.100:9443` |
-| `pcmk-drbd-ubuntu` (VIP) | PDRBDAPP | `https://10.10.1.170:9443` | `https://10.10.2.170:9443` |
 | `nativeha-ubuntu` (active instance) | NHAUAPP | `https://10.10.1.{11,12,13}:9443` | `https://10.10.2.{11,12,13}:9443` |
 | `nativeha-rhel-crr` (active instance) | NHARCAPP | `https://10.10.1.{91,92,93}:9443` | `https://10.10.2.{91,92,93}:9443` |
 | `svc-sim` (counterparty, `net-ext`) | SVCQM | `https://10.60.0.50:9443` | — |
-
-`pcmk-drbd-ubuntu` runs mqweb on every node of both sites (#1428, epic `.github#310`).
-Its site-B VIP is up only while site B is the DR primary, after a `mqlab dr cutover`.
 
 > **Replicas answer too.** A non-active Native HA instance's mqweb is up. The collection
 > query `GET $REST/qmgr` returns the QM with `"state": "replica"` (or
@@ -115,8 +110,6 @@ authenticated.` Opening the Console with no login lands on the login page.
 
 | Stack (site) | REST 401? | Console redirects to login? | Result |
 |---|---|---|---|
-| `pcmk-ubuntu` (A) | | | ☐ |
-| `pcmk-ubuntu` (B) | | | ☐ |
 | `rdqm-rhel` (A) | | | ☐ |
 | `rdqm-rhel` (B) | | | ☐ |
 | `nativeha-ubuntu` (A) | | | ☐ |
@@ -202,8 +195,6 @@ authorized" error from the queue manager. Delete any queue created.
 
 | Stack (site) | `mqadmin` writes? | `mqreadonly` 403? | `mqoperator` 2035? | 2035 event in Loki? | Console UI matches? | Result |
 |---|---|---|---|---|---|---|
-| `pcmk-ubuntu` (A) | | | | | | ☐ |
-| `pcmk-ubuntu` (B) | | | | | | ☐ |
 | `rdqm-rhel` (A) | | | | | | ☐ |
 | `rdqm-rhel` (B) | | | | | | ☐ |
 | `nativeha-ubuntu` (A) | | | | | | ☐ |
@@ -231,8 +222,6 @@ issuer=O = app-org, CN = app-org Root CA
 
 | Stack (site) | `CN=mqweb`? | Issuer app-org CA, verifies? | TLSv1.3? | Result |
 |---|---|---|---|---|
-| `pcmk-ubuntu` (A) | | | | ☐ |
-| `pcmk-ubuntu` (B) | | | | ☐ |
 | `rdqm-rhel` (A) | | | | ☐ |
 | `rdqm-rhel` (B) | | | | ☐ |
 | `nativeha-ubuntu` (A) | | | | ☐ |
@@ -246,21 +235,19 @@ issuer=O = app-org, CN = app-org Root CA
 The forward points at one instance and does not follow the queue manager. After each
 failover, re-run `mqlab console open <stack>` and confirm where it lands.
 
-**VIP stacks** (`pcmk-ubuntu`, `rdqm-rhel`). Move the QM to another node in site A. The
-VIP follows the QM, so `console open` lands on the **same** VIP and the Console works.
+**VIP stack** (`rdqm-rhel`). Move the QM to another node in site A. The VIP follows
+the QM, so `console open` lands on the **same** VIP and the Console works.
 
 The node commands run in a shell on the guest, opened with `mqlab vm ssh <guest>`.
 
 ```bash
-mqlab console open pcmk-ubuntu                        # note the live endpoint
-# pcmk, on a cluster node (mqlab vm ssh pcmk-a1): move the resource group
-sudo pcs resource move mq_group pcmk-a2               # afterwards: sudo pcs resource clear mq_group
-# rdqm, on the current primary (mqlab vm ssh rdqm-a1): suspend this node;
+mqlab console open rdqm-rhel                          # note the live endpoint
+# on the current primary (mqlab vm ssh rdqm-a1): suspend this node;
 # RDQM stops the QM here and restarts it on another site-A node
 sudo /opt/mqm/bin/rdqmadm -s
 # back on the dev VM:
-mqlab console open pcmk-ubuntu                        # same VIP; log in to the Console
-# rdqm, on rdqm-a1 again: resume the node; RDQMAPP moves back to its preferred node
+mqlab console open rdqm-rhel                          # same VIP; log in to the Console
+# on rdqm-a1 again: resume the node; RDQMAPP moves back to its preferred node
 sudo /opt/mqm/bin/rdqmadm -r
 ```
 
@@ -290,7 +277,6 @@ The `nativeha-rhel-crr` equivalent uses `nha-rhel-crr-a<n>` (`10.10.1.9<n>`) and
 
 | Stack | QM moved? | `console open` lands on | Console works? | Result |
 |---|---|---|---|---|
-| `pcmk-ubuntu` | | same VIP? | | ☐ |
 | `rdqm-rhel` | | same VIP? | | ☐ |
 | `nativeha-ubuntu` | | new active instance? | | ☐ |
 | `nativeha-rhel-crr` | | new active instance? | | ☐ |
@@ -302,7 +288,7 @@ endpoint, run Steps 1–3 at site B, then fail back and confirm site A.
 
 ```bash
 mqlab dr cutover  <stack>           # site A -> B
-mqlab console open <stack> --site b # VIP stacks: the site-B VIP; Native HA: the site-B active instance
+mqlab console open <stack> --site b # RDQM: the site-B VIP; Native HA: the site-B active instance
 # ... Steps 1-3 at site B ...
 mqlab dr failback <stack>           # site B -> A
 mqlab console open <stack>          # back on site A
@@ -312,12 +298,11 @@ mqlab console open <stack>          # back on site A
 HA arms that verb is the CRR switchover playbook (`ansible/site-nativeha-switchover.yml`
 for `nativeha-rhel-crr`, `ansible/site-nativeha-ubuntu-switchover.yml` for
 `nativeha-ubuntu`). The hand-run form is `ansible-playbook <playbook> -e target_live=b`
-to cut over and `-e target_live=a` to fail back. `pcmk-ubuntu` declares no DR verb; cut
-it over with `lab/scripts/pcmk-dr-cutover.sh a2b` and fail back with `b2a`.
+to cut over and `-e target_live=a` to fail back. For `rdqm-rhel` the verb is
+`lab/scripts/rdqm-dr-cutover.sh`.
 
 | Stack | `--site b` lands on the site-B live endpoint? | Steps 1–3 pass at site B? | Site A after fail-back? | Result |
 |---|---|---|---|---|
-| `pcmk-ubuntu` | | | | ☐ |
 | `rdqm-rhel` | | | | ☐ |
 | `nativeha-ubuntu` | | | | ☐ |
 | `nativeha-rhel-crr` | | | | ☐ |

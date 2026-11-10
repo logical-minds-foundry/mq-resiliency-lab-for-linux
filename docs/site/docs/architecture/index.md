@@ -2,10 +2,10 @@
 
 This page walks the lab from the outside in: the host machine, the virtual
 machines on it, the network fabric and node fleet inside the lab VM, and
-finally the MQ-service arms built on top. The lab runs **three HA/DR
-mechanisms** — RDQM (replicated-storage HA), Pacemaker/SAN (shared-storage HA),
-and Native HA (log-replicated HA) — across **four arms** (Native HA runs on both
-Ubuntu and RHEL), each a full **3+3** stack (a 3-node group in Data Center A with
+finally the MQ-service arms built on top. The lab runs **two HA/DR
+mechanisms** — RDQM (replicated-storage HA) and Native HA (log-replicated HA) —
+across **three arms** (Native HA runs on both Ubuntu and RHEL), each a full
+**3+3** stack (a 3-node group in Data Center A with
 an asynchronous DR/CRR relationship to a matching 3-node group in Data Center B),
 all exchanging messages with a simulated cross-business counterparty (`svc-sim`)
 over distributed queuing. Everything shown here is
@@ -19,10 +19,9 @@ which sets each stack's default and the versions it can select instead (see
 
 **Which HA mechanism is strategic?** **Native HA** is IBM's preferred HA
 solution for MQ on Linux and the lab's primary arm. Choose it for new HA
-deployments. RDQM and Pacemaker/DRBD stay in the lab as **counter-options**,
-so the lab covers the full range of Linux resiliency options. They stay for
-as long as IBM supports them, and the lab drops them only once IBM itself
-deems them non-strategic. NAS-based multi-instance queue managers are out of
+deployments. RDQM stays in the lab as the **counter-option**, for as long as
+IBM supports it; the lab drops it only once IBM itself deems it
+non-strategic. NAS-based multi-instance queue managers are out of
 scope. The sourced reasoning is in the
 [RDQM/Pacemaker strategic position](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/rdqm-pacemaker-strategic-position.md).
 
@@ -64,7 +63,7 @@ guest up to hundreds of times slower, and huge pages remove that cost
 automatically; the x86 host keeps 4 KiB pages. Those guests sit on a fabric of
 isolated libvirt networks: per-site
 data and heartbeat networks, a WAN that links the two sites, the inter-business
-network to the counterparty (`net-ext`), the SAN networks, and a dedicated
+network to the counterparty (`net-ext`), and a dedicated
 management plane. The networks are designed to be **severable** so failures can
 be injected cleanly. The **management plane** (`net-mgmt`) is "the Watcher": it
 observes every node and carries Ansible control, but is deliberately non-transit
@@ -86,25 +85,11 @@ always a separate, asynchronous DR relationship with a manual cutover.
 <!-- markdownlint-disable-next-line MD013 MD033 -->
 <iframe class="diagram" src="diagrams/03-rdqm-arm.html" style="width:100%;height:480px;border:0;border-radius:8px;" title="RDQM HA/DR arm"></iframe>
 
-## Layer 3 — The Pacemaker/SAN arm (the HA contrast)
-
-The Pacemaker arm provides the same single-site HA goal as RDQM but with a
-different mechanism: shared SAN storage (`san-a`) fronted by a Pacemaker
-cluster (`pcmk-a1..3`) instead of block-level replication. Running both on
-the same fabric lets the lab compare replicated-storage HA against
-shared-storage HA directly. Like the other arms it is a full **3+3**: cross-site
-resilience is an asynchronous DR peer in Data Center B (`pcmk-b1..3` fronting
-`san-b`, whose LUN is DRBD-replicated from `san-a` over the WAN) that receives
-the queue manager on a manual cutover — never a WAN-stretched cluster.
-
-<!-- markdownlint-disable-next-line MD013 MD033 -->
-<iframe class="diagram" src="diagrams/05-pacemaker-san.html" style="width:100%;height:360px;border:0;border-radius:8px;" title="Pacemaker/SAN arm"></iframe>
-
 ## Layer 3 — The Native HA arm (log-replicated HA)
 
-The Native HA arm reaches the same single-site HA goal a third way: MQ's
-built-in **log replication** across 3 instances (raft — no shared storage, no
-Pacemaker). One instance is the Active leader; failover is automatic. Crucially
+The Native HA arm reaches the same single-site HA goal another way: MQ's
+built-in **log replication** across 3 instances (raft — no replicated block
+device, no Pacemaker). One instance is the Active leader; failover is automatic. Crucially
 it has **no VIP** — clients connect by a 3-instance CONNAME list and reconnect
 to whichever instance is Active. Cross-site resilience is an asynchronous **CRR**
 (Cross-Region Replication) relationship with a manual cutover. The lab runs it on
@@ -127,8 +112,8 @@ Console (WebSphere Liberty, `9443/HTTPS`) — as a stateless per-node service. I
 **data-plane infrastructure**: the control surface co-located with the queue
 manager it fronts, part of what the lab *instruments*, **not** part of the
 management/observability ("Watcher") plane that observes it. Clients reach it at
-the queue manager's **data-plane** address — the floating VIP for the Pacemaker
-and RDQM arms (each site, `vip` / `vip_b`), or the **active instance's node IP**
+the queue manager's **data-plane** address — the floating VIP for the RDQM arm
+(each site, `vip` / `vip_b`), or the **active instance's node IP**
 for the Native HA arms (which have no VIP; the active member is resolved at
 runtime with the "follow the active" state probe). The topology-derived endpoints
 are an internal library behind `mqlab console open`, which forwards the dev VM to
@@ -155,7 +140,7 @@ picture, complementing the metrics half.
 
 This is a **de-facto standard, not a single-QM proof of concept**: the shared
 `mq-event-monitor` Ansible role configures it identically on **every** queue
-manager — all four HA/DR arms (RDQM, Pacemaker/SAN, and both Native HA arms) plus
+manager — all three HA/DR arms (RDQM and both Native HA arms) plus
 the shared `SVCQM` counterparty. Like mqweb, the collector is **data-plane
 infrastructure co-located with the queue manager it instruments** — but its
 output is what the observability plane consumes.

@@ -17,6 +17,11 @@
 > figures in here. Only the Ubuntu stacks run on arm64 (`.github#360`): IBM ships no
 > RHEL-on-ARM MQ, so `nativeha-ubuntu` (QM `NHAUAPP`) stands in for `nativeha-rhel-crr`.
 >
+> **Since removed:** the macOS/arm64 half also ran on `pcmk-ubuntu` (Pacemaker/SAN,
+> nodes `pcmk-a1..3`/`pcmk-b1..3`). That stack has since been removed from the lab
+> (#1733–#1735). Its figures below are kept as recorded evidence; they do not describe
+> a stack the lab still runs. `nativeha-ubuntu` is now the only arm64 stack.
+>
 > Convention: **[data]** is something measured on the lab or quoted from a source.
 > **[judgment]** is our reasoning on top of it.
 

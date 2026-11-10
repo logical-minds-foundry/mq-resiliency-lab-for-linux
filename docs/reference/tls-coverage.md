@@ -7,12 +7,12 @@
 > arm.
 >
 > Companion to [`nativeha-crr-tls-guide.md`](nativeha-crr-tls-guide.md) (the
-> Native HA / CRR keystore specifics) and [`drbd-operations.md`](drbd-operations.md)
-> / [`rdqm-ha-cheatsheet.md`](rdqm-ha-cheatsheet.md) (the RDQM substrate). This
+> Native HA / CRR keystore specifics) and
+> [`rdqm-ha-cheatsheet.md`](rdqm-ha-cheatsheet.md) (the RDQM substrate). This
 > doc is the index over all of them.
 >
 > Sources: `ansible/group_vars/all/tls.yml`, the per-arm provision playbooks and
-> roles (`mq-pcmk-qmgr`, `mq-nativeha`, `rdqm-app-tls`, `mq-inter-qm`,
+> roles (`mq-nativeha`, `rdqm-app-tls`, `mq-inter-qm`,
 > `mq-exporter`), `lab/scripts/rdqm-qm-create.sh`, and the IBM MQ 9.4.x docs cited
 > in §3.
 
@@ -51,9 +51,9 @@ Native HA peer). Every row below is securable — and secured — on that build.
 
 | # | Path | Arms | Mechanism | Cipher / identity | Secured |
 |---|------|------|-----------|-------------------|---------|
-| 1 | App client → app QM | pcmk, nha-rhel-crr, nha-ubuntu, rdqm-rhel | `APP.SVRCONN` (SVRCONN, mutual) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=app-org` | ✅ |
+| 1 | App client → app QM | nha-rhel-crr, nha-ubuntu, rdqm-rhel | `APP.SVRCONN` (SVRCONN, mutual) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=app-org` | ✅ |
 | 2 | Ops exporter → app & svc QMs | all QMs | `MON.SVRCONN` (SVRCONN, mutual) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=app-org` | ✅ |
-| 3 | Inter-QM, app side | pcmk, nha-rhel-crr, nha-ubuntu, rdqm-rhel | `<QM>.SVCQM` (SDR) + `SVCQM.<QM>` (RCVR) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=svc-org` | ✅ |
+| 3 | Inter-QM, app side | nha-rhel-crr, nha-ubuntu, rdqm-rhel | `<QM>.SVCQM` (SDR) + `SVCQM.<QM>` (RCVR) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=svc-org` | ✅ |
 | 4 | Inter-QM, svc side | shared SVCQM | `SVCQM.<QM>` (SDR) + `<QM>.SVCQM` (RCVR) + `SVC.SVRCONN` | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=app-org` / `O=svc-org` | ✅ |
 | 5 | Native HA within-group raft replication | nha-rhel-crr, nha-ubuntu | `NativeHALocalInstance` `CipherSpec` (net-hb :9414) | `ANY_TLS12` → `ECDHE_RSA_AES_256_GCM_SHA384` | ✅ |
 | 6 | Native HA **CRR cross-region** replication | nha-rhel-crr (HA/DR) | `NativeHALocalInstance` `CipherSpec` (net-wan :9415) | `ANY_TLS12` → `ECDHE_RSA_AES_256_GCM_SHA384` | ✅ |
@@ -145,7 +145,7 @@ concern. The invariant here is specifically: no plaintext **MQ** traffic.
 - IBM MQ 9.4.x — Creating a disaster recovery RDQM:
   <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=recovery-creating-disaster-rdqm>
 - Lab: `ansible/group_vars/all/tls.yml`, `ansible/roles/rdqm-app-tls/`,
-  `ansible/roles/mq-pcmk-qmgr/`, `ansible/roles/mq-nativeha/tasks/{tls,crr}.yml`,
+  `ansible/roles/mq-nativeha/tasks/{tls,crr}.yml`,
   `ansible/roles/mq-inter-qm/`, `lab/scripts/rdqm-qm-create.sh`
 - Related issues: #410 / #426 (RDQM app-channel TLS), #411 (nativeha
   `APP.SVRCONN`), #246 (Native HA replication + CRR TLS), #545 (RDQM replication

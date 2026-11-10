@@ -19,9 +19,9 @@
 > `lab/scripts/rdqm-qm-create.sh`, `docs/reference/lab-gotchas.md`,
 > `docs/reports/2026-06-06-phase-c-rdqm-findings.md`.
 >
-> **Not RDQM:** the DRBD-by-hand commands elsewhere in this repo (`drbdadm`,
-> `pcs resource`, resource `mqlun`) belong to the separate manual Pacemaker/SAN
-> HA arm — don't use them here.
+> **Not RDQM:** DRBD-by-hand commands (`drbdadm`, `pcs resource`, resource
+> `mqlun`) in older repo history belong to the since-removed manual
+> Pacemaker/SAN arm — don't use them on RDQM.
 
 ## 0. Per-node prerequisites (all 3 nodes)
 

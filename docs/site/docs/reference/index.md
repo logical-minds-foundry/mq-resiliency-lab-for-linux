@@ -49,14 +49,13 @@ Render the live inventory with `mqlab vm inventory`.
 
 ### Stacks
 
-Four HA/DR stacks, each a full **3+3** deployment (a 3-node group in Data
+Three HA/DR stacks, each a full **3+3** deployment (a 3-node group in Data
 Center A with an asynchronous DR/CRR relationship to a matching 3-node group in
 Data Center B). Queue-manager names derive from each stack's `short` token
 (`<short>APP` / `<short>SVC`), so no QM literal is hardcoded.
 
 | Stack | Mechanism | OS | `short` | Site-A groups | Site-B groups | QM VIP (A / B) |
 |---|---|---|---|---|---|---|
-| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu 26.04, IBM-unsupported (24.04 selectable) | `PCMK` | `san_a`, `pcmk_a` | `san_b`, `pcmk_b` | `10.10.1.200` / `10.10.2.200` |
 | `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL 10 (RHEL 9 selectable) | `RDQM` | `rdqm_a` | `rdqm_b` | `10.10.1.100` / `10.10.2.100` |
 | `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL 10 (RHEL 9 selectable) | `NHARC` | `nha_rhel_crr_a` | `nha_rhel_crr_b` | per-instance (no VIP) |
 | `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu 26.04, IBM-unsupported (24.04 selectable) | `NHAU` | `nha_ubuntu_a` | `nha_ubuntu_b` | per-instance (no VIP) |
@@ -76,7 +75,7 @@ stack owns its own `{SHORT}.SVC.REQUEST` queue and responder.
 
 ### Networks
 
-Every node carries a `net-mgmt` NIC; the data / heartbeat / WAN / SAN / external
+Every node carries a `net-mgmt` NIC; the data / heartbeat / WAN / external
 planes are attached per role. The management plane is deliberately non-transit
 ("the Watcher").
 
@@ -89,11 +88,9 @@ planes are attached per role. The management plane is deliberately non-transit
 | `net-hb-b` | `172.16.2.0/24` | Site-B heartbeat / replication |
 | `net-wan` | `10.99.0.0/24` | Cross-site WAN (DR/CRR replication) |
 | `net-ext` | `10.60.0.0/24` | Inter-business WAN to the `svc-sim` counterparty |
-| `net-san-a` | `10.40.1.0/24` | Site-A SAN (Pacemaker/iSCSI) |
-| `net-san-b` | `10.40.2.0/24` | Site-B SAN (Pacemaker/iSCSI) |
 
-The guest fleet is the four 3+3 stacks (24 nodes), two SAN targets (`san-a`,
-`san-b`), and six shared commons (`obs`, `mon-probe`, `svc-sim`, `app-client`,
+The guest fleet is the three 3+3 stacks (18 nodes) and six shared commons
+(`obs`, `mon-probe`, `svc-sim`, `app-client`,
 `infra-client`, `infra-svc`). The single-node OpenSearch log-search tier runs on
 `obs` (see
 [Architecture](../architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch));
@@ -117,7 +114,7 @@ QM node by default (#1502). The derivation is an internal library
 [Using the MQ Console](../operate/index.md#using-the-mq-console)). Each stack has
 one of three endpoint kinds:
 
-- **`vip`** — the stack's floating HA VIP (`pcmk-ubuntu`, `rdqm-rhel`); one URL
+- **`vip`** — the stack's floating HA VIP (`rdqm-rhel`); one URL
   per site.
 - **`active-instance`** — every instance's URL (Native HA stacks, which have no
   VIP). The client finds the live one with the "follow the active" state probe:
@@ -131,15 +128,10 @@ one of three endpoint kinds:
 
 | Stack | Kind | Site-A endpoint(s) | Site-B endpoint(s) |
 |---|---|---|---|
-| `pcmk-ubuntu` | `vip` | `https://10.10.1.200:9443` | `https://10.10.2.200:9443` |
 | `rdqm-rhel` | `vip` | `https://10.10.1.100:9443` | `https://10.10.2.100:9443` |
 | `nativeha-rhel-crr` | `active-instance` | `10.10.1.91-93:9443` | `10.10.2.91-93:9443` |
 | `nativeha-ubuntu` | `active-instance` | `10.10.1.11-13:9443` | `10.10.2.11-13:9443` |
 | `svc-sim` | `counterparty` | `https://10.60.0.50:9443` | — |
-
-`pcmk-drbd-ubuntu` (`vip`, `https://10.10.{1,2}.170:9443`) answers on the site that is
-the DR primary: site A after bootstrap, site B after `mqlab dr cutover` (epic
-`.github#310`).
 
 For the acceptance procedure that proves each endpoint is live, see the
 [mqweb endpoint verification runbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-endpoint-verification.md).
@@ -197,7 +189,7 @@ Command groups:
 
 | Group | Subcommands | Purpose |
 |---|---|---|
-| `mqlab qm` | `create` · `destroy` · `up` · `down` · `status` · `reload` · `e2e` | MQ queue-manager per-stack HA lifecycle (stack-dispatched). `status` on a Native HA CRR stack reports both sites; `reload` restarts the active QM and tells its clients to reconnect (`endmqm -r`; Native HA and RDQM, Pacemaker refuses; see [Failover drills](../operate/index.md#failover-drills)); `e2e` sends a bounded request/reply burst and exits non-zero unless every request round-trips |
+| `mqlab qm` | `create` · `up` · `down` · `status` · `reload` · `e2e` | MQ queue-manager per-stack HA lifecycle (stack-dispatched). `status` on a Native HA CRR stack reports both sites; `reload` restarts the active QM and tells its clients to reconnect (`endmqm -r`; see [Failover drills](../operate/index.md#failover-drills)); `e2e` sends a bounded request/reply burst and exits non-zero unless every request round-trips |
 | `mqlab dr` | `cutover` · `failback` | Cross-site DR: cut a stack's live QM over to its DR peer (`cutover`, A→B) and back (`failback`, B→A) |
 | `mqlab vm` | `inventory` · `roster` · `ssh` | Guest VM maps (Ansible inventory / salt-ssh roster) + interactive shell |
 | `mqlab obs` | `targets` · `dashboard` · `net-state` · `reach-peers` · `open` | Observability renders (Prometheus targets, Grafana dashboard) + reach the Watcher |
@@ -218,8 +210,8 @@ Hard-won, symptom-first reference notes live in the repo under `docs/reference/`
 (outside the docs site). Curated pointers:
 
 - **[RDQM/Pacemaker strategic position](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/rdqm-pacemaker-strategic-position.md)**
-  — why Native HA is the lab's strategic arm and RDQM and Pacemaker/DRBD stay
-  as counter-options while IBM supports them (sourced, data vs judgment).
+  — why Native HA is the lab's strategic arm and RDQM stays as the
+  counter-option while IBM supports it (sourced, data vs judgment).
 - **[OS-version support matrix](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md)**
   — IBM's MQ, Native HA and RDQM support status per OS release.
 - **[Ansible dependency currency](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/ansible-dependency-currency.md)**
@@ -227,11 +219,9 @@ Hard-won, symptom-first reference notes live in the repo under `docs/reference/`
   latest releases, how they are locked and installed, and recommendations
   (sourced, data vs judgment).
 - **[Lab gotchas playbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/lab-gotchas.md)**
-  — symptom → cause → fix for libvirt / Vagrant / Pacemaker.
+  — symptom → cause → fix for libvirt / Vagrant / MQ HA.
 - **[Lab bootstrap runbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/lab-bootstrap.md)**
   — cold-start bring-up from a freshly-rebuilt VM.
-- **[DRBD operations reference](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/drbd-operations.md)**
-  — the Pacemaker/SAN replication layer, symptom-first.
 - **[RDQM 3-node HA cheat sheet](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/rdqm-ha-cheatsheet.md)**
   and the
   **[RDQM DR/HA cold-build defect](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/rdqm-drha-no-ssh-fallback-defect.md)**.
