@@ -304,59 +304,6 @@ def test_site_b_is_skipped_by_no_dr() -> None:
     assert _qm_play()["hosts"] == both
 
 
-def test_one_pdrbd_qm_play_over_both_sites_derives_per_site_values() -> None:
-    # ONE play over both sites, so formation interleaves across them in task order (site
-    # B's DR member is up before site A clears the DR bitmap).
-    play = _qm_play()
-    assert play["vars_files"] == ["vars/pdrbd-peers.yml", "vars/pdrbd-crm-mon.yml"]
-    v = play["vars"]
-    assert v["pdrbd_site_group"] == "pdrbd_{{ pdrbd_site }}"
-    assert "selectattr('site', 'equalto', pdrbd_site)" in v["pdrbd_site_peers"]
-    assert "rejectattr('site', 'equalto', pdrbd_site)" in v["pdrbd_remote_peers"]
-    assert v["pdrbd_dr_local_id"] == "{{ 0 if pdrbd_site == 'a' else 1 }}"
-    qm = _load(REPO_ROOT / "lab" / "topology.yaml")["stacks"]["pcmk-drbd-ubuntu"]["qm"]
-    vip_a, vip_b = qm["vip"], qm["vip_b"]
-    assert v["qm_vip"] == "{{ '" + vip_a + "' if pdrbd_site == 'a' else '" + vip_b + "' }}"
-
-
-def test_peer_vars_match_the_topology_groups() -> None:
-    peers = _load(PEERS)["pdrbd_peers_all"]
-    groups = _load(REPO_ROOT / "lab" / "topology.yaml")["groups"]
-    for site in ("a", "b"):
-        assert [p["name"] for p in peers if p["site"] == site] == groups[f"pdrbd_{site}"]
-
-
-def test_cluster_ha_is_site_local_with_no_fencing() -> None:
-    plays = _plays(CLUSTER_HA)
-    assert all(p["hosts"] == "pdrbd_a" for p in plays)
-    roles = [r for p in plays for r in _play_roles(p)]
-    assert roles == ["drbd9", "mq-install", "pcmk-cluster", "mqweb"]
-    [cluster] = [p for p in plays if "pcmk-cluster" in _play_roles(p)]
-    topo = _load(REPO_ROOT / "lab" / "topology.yaml")
-    assert cluster["vars"]["pcmk_cluster_name"] == "mqpdrbd-a"
-    assert [(n["name"], n["hb"]) for n in cluster["vars"]["pcmk_site_nodes"]] == [
-        (h, topo["nodes"][h]["nics"]["net-hb-a"]) for h in topo["groups"]["pdrbd_a"]
-    ]
-    [web] = [p for p in plays if "mqweb" in _play_roles(p)]
-    assert web["serial"] == 1  # #1161: cold-start mqweb one node at a time
-
-
-def test_site_b_is_its_own_cluster_with_no_fencing() -> None:
-    # RDQM: each site its own 3-node cluster, none spanning the sites (CL-1).
-    plays = _plays(DR_REPLICATION)
-    assert all(p["hosts"] == "pdrbd_b" for p in plays)
-    roles = [r for p in plays for r in _play_roles(p)]
-    assert roles == ["drbd9", "mq-install", "pcmk-cluster", "mqweb"]
-    [cluster] = [p for p in plays if "pcmk-cluster" in _play_roles(p)]
-    topo = _load(REPO_ROOT / "lab" / "topology.yaml")
-    assert cluster["vars"]["pcmk_cluster_name"] == "mqpdrbd-b"
-    assert [(n["name"], n["hb"]) for n in cluster["vars"]["pcmk_site_nodes"]] == [
-        (h, topo["nodes"][h]["nics"]["net-hb-b"]) for h in topo["groups"]["pdrbd_b"]
-    ]
-    [web] = [p for p in plays if "mqweb" in _play_roles(p)]
-    assert web["serial"] == 1
-
-
 def test_distributed_import_reaches_the_qm_at_either_site() -> None:
     # Both sites, site A first: after a DR cutover the QM runs at site B, and with only
     # site-A names e2e failed live with MQRC 2538 (#1428).
@@ -367,15 +314,6 @@ def test_distributed_import_reaches_the_qm_at_either_site() -> None:
     )
     assert v["app_conn"] == "pdrbd-vip-a.client.com(1414),pdrbd-vip-b.client.com(1414)"
     assert v["app_tls"] is True
-
-
-def test_every_pdrbd_node_named_in_our_conn_has_a_net_ext_nic() -> None:
-    topo = _load(REPO_ROOT / "lab" / "topology.yaml")
-    for h in topo["groups"]["pdrbd_a"] + topo["groups"]["pdrbd_b"]:
-        assert "net-ext" in topo["nodes"][h]["nics"], h
-
-
-# --- the DR/HA shape (T6, #1428) --------------------------------------------------------------
 
 
 def _render_dr_res(host: str) -> str:

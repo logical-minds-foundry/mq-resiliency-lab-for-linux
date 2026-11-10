@@ -1185,7 +1185,7 @@ def gc_summary(result: GcResult) -> str:
 # Unreferenced boxes — `box gc --unreferenced` (#1399)                        #
 # --------------------------------------------------------------------------- #
 # A catalog re-pin (e.g. moving `infra:` to a newer Ubuntu major) leaves the boxes it
-# moved off — the infra, obs and san boxes on the old major — registered and cached,
+# moved off — the infra and obs boxes on the old major — registered and cached,
 # several GB each. They are not RETIRED names (the old major is still a catalog OS; a
 # re-pin back would resolve them again), so the retired pass rightly keeps them. This
 # pass reclaims a box only when NO current catalog selection can resolve to it on ANY

@@ -77,13 +77,13 @@ def test_a_failed_step_is_kept_marked_and_counted_in_its_phase():
 def test_human_summary_lists_unphased_steps_and_notes():
     rec = PerfRecord(stack="s", started_at=0.0)
     rec.add_step(phase="", label="legacy step", seconds=3.0, retries=0)
-    rec.notes.append("guest san-a: steal sample unavailable (ssh timeout)")
+    rec.notes.append("guest rdqm-a1: steal sample unavailable (ssh timeout)")
     summary = rec.human_summary()
     assert "(unphased)" in summary
     assert "3.00s" in summary
     assert "steal sample unavailable" in summary
     assert json.loads(rec.to_json())["notes"] == [
-        "guest san-a: steal sample unavailable (ssh timeout)"
+        "guest rdqm-a1: steal sample unavailable (ssh timeout)"
     ]
 
 

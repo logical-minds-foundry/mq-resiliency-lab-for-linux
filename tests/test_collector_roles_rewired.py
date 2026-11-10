@@ -48,9 +48,6 @@ OLD_PAYLOADS = {
 }
 # The bakes of every box role whose catalog entry lists the component (spec §5.8).
 OBSERVABILITY_BAKES = {
-    "pcmk-ubuntu",
-    "pdrbd-ubuntu",
-    "san",
     "nativeha-ubuntu",
     "nativeha-rhel",
     "mq-rdqm",
@@ -235,10 +232,20 @@ def test_bakes_install_observability_component(stem: str) -> None:
     assert sum(len(_role_includes(p, "runtime-install")) for p in plays) == 1
 
 
+def _other_catalog_bakes() -> set[str]:
+    """The bake stems of every catalogued box role that does NOT list the component."""
+    roles = versions.load_catalog().roles
+    return {
+        stem
+        for spec in roles.values()
+        if COMPONENT not in spec["components"]
+        for stem in spec["bake"].values()
+    }
+
+
 def test_other_bakes_do_not_install_observability() -> None:
-    for bake in sorted(ANSIBLE.glob("bake-*.yml")):
-        stem = bake.stem.removeprefix("bake-")
-        if stem in OBSERVABILITY_BAKES:
-            continue
+    others = _other_catalog_bakes()
+    assert others, "the catalog has box roles without the component"
+    for stem in sorted(others):
         for task in _role_includes(_plays(stem), "component-install"):
             assert (task.get("vars") or {}).get("component_name") != COMPONENT, stem

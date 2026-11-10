@@ -2,7 +2,7 @@
 
 Pins the CLI wiring (host search across the cluster group and the running DR groups, the
 extra vars the playbook needs, the timeout, fail-loud exits), the per-arm topology verbs
-(Native HA and RDQM run site-qm-reload.yml, Pacemaker refuses), and the IBM-documented
+(Native HA and RDQM run site-qm-reload.yml), and the IBM-documented
 commands the role runs per mechanism.
 """
 
@@ -162,15 +162,6 @@ def test_reload_playbook_failure_propagates(monkeypatch, tmp_path):
     assert result.exit_code == 2
 
 
-def test_reload_refuse_verb_exits_2_with_the_reason(monkeypatch, tmp_path):
-    _seed(monkeypatch, tmp_path, _topo("{ refuse: 'no honest reconnect-restart here.' }"))
-    runner = RecordingRunner(results=[])
-    result = _invoke(monkeypatch, runner, "nha-crr")
-    assert result.exit_code == 2
-    assert "mqlab qm reload nha-crr: refused — no honest reconnect-restart here." in result.stderr
-    assert runner.recorded == []
-
-
 def test_reload_unsupported_verb_kind_exits_2(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path, _topo("{ cmd: 'endmqm -r {qm}' }"))
     runner = RecordingRunner(results=[])
@@ -241,12 +232,6 @@ def test_native_ha_and_rdqm_stacks_run_the_reload_playbook():
     stacks = lab_stacks()
     for name in ("nativeha-rhel-crr", "nativeha-ubuntu", "rdqm-rhel"):
         assert stacks[name].verbs["qm-reload"] == {"playbook": "site-qm-reload.yml"}, name
-
-
-def test_pacemaker_stack_refuses_reload_with_a_reason():
-    refuse = lab_stacks()["pcmk-ubuntu"].verbs["qm-reload"]["refuse"]
-    assert "endmqm -w" in refuse
-    assert "rdqm and native-ha" in refuse
 
 
 # --- the playbook and role: IBM-documented commands only, fail loud --------------------

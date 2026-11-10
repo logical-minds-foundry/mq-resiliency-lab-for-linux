@@ -34,7 +34,7 @@ _FATBOX = _BOXES / "build-fatbox.sh"
 _FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=True)
 OBS = "mq-resiliency-observability"
 TREE = "f" * 40
-PIN = box.FLEET["pcmk-ubuntu24"].runtime_pin
+PIN = box.FLEET["mq-nativeha-ubuntu24"].runtime_pin
 
 
 class _NoPause:
@@ -53,8 +53,8 @@ def _fake_deps() -> cli.Deps:
 
 @pytest.fixture
 def baking(monkeypatch: pytest.MonkeyPatch) -> box.BoxSpec:
-    """pcmk-ubuntu24 baking the observability component, its tree hash stubbed."""
-    spec = dataclasses.replace(box.FLEET["pcmk-ubuntu24"], components=(OBS,))
+    """mq-nativeha-ubuntu24 baking the observability component, its tree hash stubbed."""
+    spec = dataclasses.replace(box.FLEET["mq-nativeha-ubuntu24"], components=(OBS,))
     monkeypatch.setattr(box, "FLEET", {**box.FLEET, spec.name: spec})
     monkeypatch.setattr(box, "_component_tree", lambda name: TREE)
     return spec
@@ -117,7 +117,8 @@ def test_builder_args_uncommitted_component_exits_1(baking, monkeypatch, capsys)
     with pytest.raises(typer.Exit) as exc:
         box.builder_args(baking, _FACTS)
     assert exc.value.exit_code == 1
-    assert f"mqlab box: pcmk-ubuntu24: components/{OBS} is not committed" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert f"mqlab box: mq-nativeha-ubuntu24: components/{OBS} is not committed" in err
 
 
 def test_component_tree_is_the_git_tree_hash(monkeypatch):
@@ -138,26 +139,26 @@ def test_component_tree_is_the_git_tree_hash(monkeypatch):
 def test_box_build_builds_missing_component_artifact(baking, monkeypatch):  # Review Focus 2
     events: list = []
     _stub_build(monkeypatch, events, "BUILD")
-    box.build_boxes(["pcmk-ubuntu24"], force=False)
+    box.build_boxes(["mq-nativeha-ubuntu24"], force=False)
     assert events == [
         ("ensure_built", OBS),
         ("install_vars", [OBS], X86_64),
-        ("run", ["box pcmk-ubuntu24"]),
+        ("run", ["box mq-nativeha-ubuntu24"]),
     ]
 
 
 def test_box_build_forced_bake_ensures_components(baking, monkeypatch):
     events: list = []
     _stub_build(monkeypatch, events, "REUSE")
-    box.build_boxes(["pcmk-ubuntu24"], force=True)
+    box.build_boxes(["mq-nativeha-ubuntu24"], force=True)
     assert events[0] == ("ensure_built", OBS)
 
 
 def test_box_reuse_builds_no_component(baking, monkeypatch):
     events: list = []
     _stub_build(monkeypatch, events, "REUSE")
-    box.build_boxes(["pcmk-ubuntu24"], force=False)
-    assert events == [("run", ["box pcmk-ubuntu24"])]
+    box.build_boxes(["mq-nativeha-ubuntu24"], force=False)
+    assert events == [("run", ["box mq-nativeha-ubuntu24"])]
 
 
 def test_box_build_of_boxes_baking_nothing_builds_no_component(monkeypatch):
@@ -184,7 +185,7 @@ def test_box_build_component_failure_exits_1_before_baking(baking, monkeypatch, 
 
     monkeypatch.setattr(box.component, "ensure_built", boom)
     with pytest.raises(typer.Exit) as exc:
-        box.build_boxes(["pcmk-ubuntu24"], force=False)
+        box.build_boxes(["mq-nativeha-ubuntu24"], force=False)
     assert exc.value.exit_code == 1
     assert f"mqlab box build: {error}" in capsys.readouterr().err
     assert events == []  # nothing was baked
@@ -195,7 +196,7 @@ def test_box_build_component_failure_exits_1_before_baking(baking, monkeypatch, 
 
 def _record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str) -> None:
     monkeypatch.setattr(box, "_boxes_cache_dir", lambda: tmp_path)
-    (tmp_path / box.FLEET["pcmk-ubuntu24"].components_record_artifact).write_text(text)
+    (tmp_path / box.FLEET["mq-nativeha-ubuntu24"].components_record_artifact).write_text(text)
 
 
 def test_box_status_shows_baked_components(monkeypatch, tmp_path):
@@ -205,7 +206,7 @@ def test_box_status_shows_baked_components(monkeypatch, tmp_path):
         json.dumps({"runtime": PIN, "components": {OBS: TREE, "a-comp": "1" * 40}}),
     )
     monkeypatch.setattr(box, "box_decision", _decide("REUSE"))
-    out = box.render_status(["pcmk-ubuntu24", "san-ubuntu26"]).splitlines()
+    out = box.render_status(["mq-nativeha-ubuntu24", "obs-ubuntu26"]).splitlines()
     assert out[0].endswith("COMPONENTS")
     assert out[1].endswith(f"a-comp@{'1' * 12},{OBS}@{'f' * 12} ({PIN})")
     assert out[2].endswith(" -")  # no record: bakes no component (or is not cached)
@@ -219,15 +220,15 @@ def test_baked_components_of_a_base_box_is_a_dash(monkeypatch, tmp_path):
 @pytest.mark.parametrize("text", ["not json", "[]", '{"runtime": "x"}', '{"components": {}}'])
 def test_baked_components_rejects_a_bad_record(monkeypatch, tmp_path, text):
     _record(tmp_path, monkeypatch, text)
-    with pytest.raises(ValueError, match="mqlab box rebuild pcmk-ubuntu24"):
-        box.baked_components("pcmk-ubuntu24")
+    with pytest.raises(ValueError, match="mqlab box rebuild mq-nativeha-ubuntu24"):
+        box.baked_components("mq-nativeha-ubuntu24")
 
 
 def test_clean_removes_the_components_record(monkeypatch, tmp_path):
     _record(tmp_path, monkeypatch, "{}")
     monkeypatch.setattr(box, "_vagrant_box_remove", lambda name: None)
-    record = tmp_path / "pcmk-ubuntu24-x86_64.components.json"
-    assert str(record) in box.clean_boxes(["pcmk-ubuntu24"])
+    record = tmp_path / "mq-nativeha-ubuntu24-x86_64.components.json"
+    assert str(record) in box.clean_boxes(["mq-nativeha-ubuntu24"])
     assert not record.exists()
 
 
@@ -254,7 +255,8 @@ def _without(args: list[str], flag: str) -> list[str]:
 
 @pytest.mark.parametrize("flag", ["--runtime-pin", "--components"])
 def test_fatbox_requires_runtime_pin_and_components(flag, tmp_path):
-    r = _fatbox(*_without(fatbox_args("pcmk-ubuntu24"), flag), "--dry-run", cache_dir=tmp_path)
+    args = _without(fatbox_args("mq-nativeha-ubuntu24"), flag)
+    r = _fatbox(*args, "--dry-run", cache_dir=tmp_path)
     assert r.returncode == 2
     assert f"ERROR: {flag} is required" in r.stderr
 
@@ -267,21 +269,21 @@ def test_fatbox_requires_install_vars_with_components(tmp_path):
 
 
 def test_fatbox_rejects_malformed_components(tmp_path):
-    args = _with(fatbox_args("pcmk-ubuntu24"), "--components", "demo")
+    args = _with(fatbox_args("mq-nativeha-ubuntu24"), "--components", "demo")
     r = _fatbox(*args, "--install-vars", "/x.json", "--dry-run", cache_dir=tmp_path)
     assert r.returncode == 2
     assert "--components entries are <name>@<tree hash>" in r.stderr
 
 
 def test_fatbox_components_needs_a_value(tmp_path):
-    r = _fatbox(*fatbox_args("pcmk-ubuntu24"), "--components", cache_dir=tmp_path)
+    r = _fatbox(*fatbox_args("mq-nativeha-ubuntu24"), "--components", cache_dir=tmp_path)
     assert r.returncode == 2
     assert "--components needs a value" in r.stderr
 
 
 def test_fatbox_dry_run_with_components_hashes_them(tmp_path):
     # A dry run (box status) never reads the install vars: only a real bake installs.
-    base = [*fatbox_args("pcmk-ubuntu24"), "--install-vars", str(tmp_path / "absent.json")]
+    base = [*fatbox_args("mq-nativeha-ubuntu24"), "--install-vars", str(tmp_path / "absent.json")]
     cache = tmp_path / "boxes"
     a = _fatbox(*_with(base, "--components", "demo@aaa"), "--dry-run", cache_dir=cache)
     assert a.returncode == 0, a.stderr
@@ -291,9 +293,9 @@ def test_fatbox_dry_run_with_components_hashes_them(tmp_path):
         [
             "bash",
             str(_BOXES / "_manifest-hash.sh"),
-            "pcmk-ubuntu24",
+            "mq-nativeha-ubuntu24",
             "--bake-stem",
-            "pcmk-ubuntu",
+            "nativeha-ubuntu",
             "--mq-bearing",
             base[base.index("--mq-bearing") + 1],
             "--os-pin",
@@ -308,8 +310,8 @@ def test_fatbox_dry_run_with_components_hashes_them(tmp_path):
         check=True,
     ).stdout.strip()
     cache.mkdir(exist_ok=True)
-    (cache / "pcmk-ubuntu24-x86_64.box").write_text("box")
-    (cache / "pcmk-ubuntu24-x86_64.manifest-hash").write_text(digest + "\n")
+    (cache / "mq-nativeha-ubuntu24-x86_64.box").write_text("box")
+    (cache / "mq-nativeha-ubuntu24-x86_64.manifest-hash").write_text(digest + "\n")
     same = _fatbox(*_with(base, "--components", "demo@aaa"), "--dry-run", cache_dir=cache)
     assert "decision:  REUSE" in same.stdout, same.stderr
     edited = _fatbox(*_with(base, "--components", "demo@bbb"), "--dry-run", cache_dir=cache)
@@ -318,9 +320,9 @@ def test_fatbox_dry_run_with_components_hashes_them(tmp_path):
 
 def test_fatbox_args_pins_component_trees(monkeypatch):
     # The shared helper stands in FAKE_TREE for git, so builder argv stays git-free.
-    spec = dataclasses.replace(box.FLEET["pcmk-ubuntu24"], components=(OBS,))
+    spec = dataclasses.replace(box.FLEET["mq-nativeha-ubuntu24"], components=(OBS,))
     monkeypatch.setattr(box, "_build_fleet", lambda facts: {spec.name: spec})
-    argv = fatbox_args("pcmk-ubuntu24")
+    argv = fatbox_args("mq-nativeha-ubuntu24")
     assert argv[argv.index("--components") + 1] == f"{OBS}@{FAKE_TREE}"
 
 

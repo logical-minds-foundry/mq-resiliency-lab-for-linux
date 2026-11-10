@@ -88,8 +88,8 @@ def test_lab_render_real_topology():
     assert "forwarders { 10.60.0.9; };" in out["named.conf.local.infra-client"]
     assert "forwarders { 10.60.0.8; };" in out["named.conf.local.infra-svc"]
     # the real VIP service records land in the client zone (site-A + site-B DR)
-    assert "pcmk-vip-a.client.com. IN A 10.10.1.200" in out["client.com.zone"]
-    assert "pcmk-vip-b.client.com. IN A 10.10.2.200" in out["client.com.zone"]
+    assert "rdqm-vip-a.client.com. IN A 10.10.1.100" in out["client.com.zone"]
+    assert "rdqm-vip-b.client.com. IN A 10.10.2.100" in out["client.com.zone"]
 
 
 def test_host_dns_facts_resolver_self_and_fqdn():

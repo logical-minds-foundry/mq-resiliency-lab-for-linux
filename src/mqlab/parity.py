@@ -30,23 +30,16 @@ VERBS: tuple[str, ...] = (
     "diagnostics",
 )
 
-# arm -> verb -> Support. pcmk-ubuntu is the reference backend (all supported);
-# rdqm-rhel is NOT_YET until its backend lands (P3/P4).
+# arm -> verb -> Support. rdqm-rhel is NOT_YET until its backend lands (P3/P4).
 # nativeha-rhel-crr (#246) is fully supported: HA verbs (Phase 1), CRR/DR verbs
 # (Phase 3), and diagnostics (runmqras capture) all proven on the live arm.
 # nativeha-ubuntu (#417) shares that backend verbatim — same mq-nativeha role,
 # same mqmonitor@ verbs, same CRR/switchover playbook shapes (only the Debian
 # install adapter + group/QM names differ) — so it declares the same capability.
 MATRIX: dict[str, dict[str, Support]] = {
-    "pcmk-ubuntu": dict.fromkeys(VERBS, Support.SUPPORTED),
     "rdqm-rhel": dict.fromkeys(VERBS, Support.NOT_YET),
     "nativeha-rhel-crr": dict.fromkeys(VERBS, Support.SUPPORTED),
     "nativeha-ubuntu": dict.fromkeys(VERBS, Support.SUPPORTED),
-    # pcmk-drbd-ubuntu (epic .github#310): the DR verbs were proven live in Task 6
-    # (#1428, 2026-10-17: HA+DR bootstrap, cutover + failback with the RPO-0 drill, e2e
-    # at each site). Task 9 sets the rest from the recorded drill evidence.
-    "pcmk-drbd-ubuntu": dict.fromkeys(VERBS, Support.NOT_YET)
-    | dict.fromkeys(("dr-bootstrap", "cutover", "failback"), Support.SUPPORTED),
 }
 
 

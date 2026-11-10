@@ -166,7 +166,7 @@ def test_option_like_or_wrong_arity_prints_usage_and_writes_nothing(sandbox, arg
         "mqweb_aes_pasphrase",  # a caller typo must not mint a fresh secret
         "pki-keyrpwd-nosuchqm",  # the pki family is the registered CNs only
         "pki-keyrpwd-",
-        "pki-keyrpwd-PCMKAPP",  # callers lowercase the CN
+        "pki-keyrpwd-RDQMAPP",  # callers lowercase the CN
         "bad/name",
         "",
     ],
@@ -277,9 +277,9 @@ def test_caller_scan_finds_the_known_callers():
     scan = _scan_callers()
     # No in-repo shell caller remains (dr-provision.sh sources its stack's secrets
     # through `mqlab vm provision-env` since #1502), so pin the shell form directly.
-    shell_call = 'export X="$("$HERE/lab-secret.sh" pcmk_hacluster_password)"'
+    shell_call = 'export X="$("$HERE/lab-secret.sh" mqweb_aes_passphrase)"'
     assert [m.group(1) for r in _INVOCATION_RES if (m := r.search(shell_call))] == [
-        "pcmk_hacluster_password"
+        "mqweb_aes_passphrase"
     ]
     assert (
         "ansible/roles/opensearch-dashboards/tasks/configure.yml"

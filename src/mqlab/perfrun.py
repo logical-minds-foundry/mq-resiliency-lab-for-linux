@@ -64,7 +64,7 @@ PREFLIGHT = "preflight"
 def prereq_phase(phase: str) -> str:
     """The report phase for a bootstrap phase's prerequisite ensures (#1248).
 
-    Each selected phase ensures its declared prerequisites (boxes, MQ media, SAN debs,
+    Each selected phase ensures its declared prerequisites (boxes, MQ media,
     galaxy collections, PKI) before its own steps run. That time used to fall outside
     every report phase (about 240s of a cold run), so it is reported as
     `prereq:<phase>` (e.g. `prereq:vms`, which holds the box ensure), right before the

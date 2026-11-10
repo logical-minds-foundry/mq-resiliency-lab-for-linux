@@ -401,8 +401,8 @@ if [ "$BASE_KIND" = rhel ]; then
 fi
 
 # The Ubuntu MQ bakes install the full MQ via the Ubuntu mq-install role — mq-ubuntu for
-# the svc/app/probe commons, and the HA arms (nativeha-ubuntu, pcmk-ubuntu, pdrbd-ubuntu)
-# for their cluster nodes' server. (infra is BIND9 and obs the observability stack — no
+# the svc/app/probe commons, and the nativeha-ubuntu HA arm
+# for its cluster nodes' server. (infra is BIND9 and obs the observability stack — no
 # MQ; obs dropped its unused MQ + mq_prometheus in #1584.)
 # Like rdqm-install, mq-install reads its tarball from mq_media_dir; point it at the
 # host-durable main-worktree cache (the worktree's build/ is empty). The deb tarball is
@@ -422,7 +422,7 @@ mq_pin() {
   printf '%s' "$pin"
 }
 case "$BAKE" in
-  mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu | pdrbd-ubuntu)
+  mq-ubuntu | nativeha-ubuntu)
     MQ_PIN="$(mq_pin)"
     case "$ARCH" in
       aarch64) MQ_MEDIA_TOKEN=UbuntuLinuxARM64 ;;

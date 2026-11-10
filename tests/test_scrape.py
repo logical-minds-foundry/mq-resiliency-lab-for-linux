@@ -68,7 +68,7 @@ def test_missing_mgmt_ip_raises():
 
 # --- MQ exporter / ibmmq scrape (#423) ---------------------------------------
 
-# A minimal per-stack topology: a VIP arm (pcmk), a VIP-less Native HA arm (whose
+# A minimal per-stack topology: a VIP arm (rdqm), a VIP-less Native HA arm (whose
 # app conn is its site-A instances' MGMT-plane IPs — monitoring is management
 # traffic, #975), and a reserved stack with no alloc ports (skipped). The Native
 # HA nodes carry BOTH a net-mgmt and a net-data-a nic so the tests can assert the
@@ -83,10 +83,10 @@ MQ_TOPO = {
     "groups": {"probe": ["mon-probe"], "nha_x_a": ["nha-x-a1", "nha-x-a2", "nha-x-a3"]},
     "svc": {"short": "SVC", "conn": "10.60.0.50", "exporter_port": 9158},
     "stacks": {
-        "pcmk-ubuntu": {
-            "short": "PCMK",
-            "qm": {"vip": "10.10.1.200"},
-            "alloc": {"exporter_app_port": 9157},
+        "rdqm-rhel": {
+            "short": "RDQM",
+            "qm": {"vip": "10.10.1.100"},
+            "alloc": {"exporter_app_port": 9159},
         },
         "nha-x": {
             "short": "NHAX",
@@ -106,7 +106,7 @@ def test_mq_exporter_instances_app_per_stack_plus_one_shared_svc():
     # reserved stack (no app port) is skipped -> one app per real stack + ONE shared
     # SVCQM svc instance total (#446), not a per-stack {short}SVC.
     assert [(i["qm"], i["role"], i["port"]) for i in insts] == [
-        ("PCMKAPP", "app", 9157),
+        ("RDQMAPP", "app", 9159),
         ("NHAXAPP", "app", 9163),
         ("SVCQM", "svc", 9158),
     ]
@@ -120,8 +120,8 @@ def test_mq_exporter_instances_scoped_to_one_stack():
     # never another stack's — so provisioning one stack deploys only its own unit.
     from mqlab.scrape import mq_exporter_instances
 
-    scoped = mq_exporter_instances(MQ_TOPO, stack="pcmk-ubuntu")
-    assert {(i["qm"], i["role"]) for i in scoped} == {("PCMKAPP", "app"), ("SVCQM", "svc")}
+    scoped = mq_exporter_instances(MQ_TOPO, stack="rdqm-rhel")
+    assert {(i["qm"], i["role"]) for i in scoped} == {("RDQMAPP", "app"), ("SVCQM", "svc")}
     assert all(i["stack"] != "nha-x" for i in scoped)
 
 
@@ -143,8 +143,8 @@ def test_mq_exporter_instances_scope_to_stack_without_app_yields_only_svc():
 def test_render_mq_exporters_scoped_to_one_stack():
     from mqlab.scrape import render_mq_exporters
 
-    data = json.loads(render_mq_exporters(MQ_TOPO, stack="pcmk-ubuntu"))
-    assert {e["stack"] for e in data["mq_exporters"]} == {"pcmk-ubuntu", "commons"}
+    data = json.loads(render_mq_exporters(MQ_TOPO, stack="rdqm-rhel"))
+    assert {e["stack"] for e in data["mq_exporters"]} == {"rdqm-rhel", "commons"}
 
 
 def test_svc_exporter_conn_matches_its_qm_name_446_regression():
@@ -162,7 +162,7 @@ def test_mq_exporter_app_conn_is_vip_or_native_ha_instance_list():
 
     by_qm = {i["qm"]: i for i in mq_exporter_instances(MQ_TOPO)}
     # VIP arm: the app conn is the VIP; the single shared svc conn is svc-sim's address
-    assert by_qm["PCMKAPP"]["conn"] == "10.10.1.200(1414)"
+    assert by_qm["RDQMAPP"]["conn"] == "10.10.1.100(1414)"
     assert by_qm["SVCQM"]["conn"] == "10.60.0.50(1414)"
     # VIP-less Native HA: the app conn lists every site-A instance over the MGMT plane
     # — monitoring is management traffic, never the data-a replication plane (#975).
@@ -176,12 +176,12 @@ def test_render_mq_scrape_targets_file_sd_on_the_probe():
 
     out = json.loads(render_mq_scrape_targets(MQ_TOPO))
     assert out[0] == {
-        "targets": ["10.50.0.3:9157"],
-        "labels": {"host": "mon-probe", "stack": "pcmk-ubuntu", "role": "app"},
+        "targets": ["10.50.0.3:9159"],
+        "labels": {"host": "mon-probe", "stack": "rdqm-rhel", "role": "app"},
     }
     # two app targets + one shared svc target (9158), no per-stack svc ports (#446)
     assert {t["targets"][0] for t in out} == {
-        "10.50.0.3:9157",
+        "10.50.0.3:9159",
         "10.50.0.3:9163",
         "10.50.0.3:9158",
     }
@@ -254,10 +254,10 @@ def test_render_mq_scrape_targets_needs_a_probe_host():
 def test_lab_mq_renderers_read_the_real_topology():
     from mqlab.scrape import lab_mq_exporters, lab_mq_scrape_targets
 
-    # the real topology renders without error and covers all four canonical stacks
+    # the real topology renders without error and covers all three canonical stacks
     exporters = json.loads(lab_mq_exporters())["mq_exporters"]
     qms = {e["qm"] for e in exporters}
-    assert {"PCMKAPP", "RDQMAPP", "NHARCAPP", "NHAUAPP"} <= qms
+    assert {"RDQMAPP", "NHARCAPP", "NHAUAPP"} <= qms
     # exactly one shared svc QM, and no per-stack {short}SVC survivors (#446)
     assert "SVCQM" in qms
     assert not any(q.endswith("SVC") for q in qms)

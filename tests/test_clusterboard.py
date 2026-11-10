@@ -11,11 +11,8 @@ from mqlab.clusterboard import (
     fold_side,
     hero_tiles,
     integrity_panel,
-    log_row,
     matrix,
     nativeha_status_band,
-    net_section,
-    perf_section,
     rdqm_dr_card,
     rdqm_status_band,
     render_cluster_dashboard,
@@ -108,40 +105,12 @@ def test_timeline_band_is_a_state_timeline_with_range_queries():
     assert "nodes online" in legends and "DRBD primary" in legends
 
 
-def test_perf_section_timeseries_from_existing_metrics():
-    ps = perf_section(DS, y=0)
-    assert ps and all(p["type"] == "timeseries" for p in ps)
-    titles = " ".join(p["title"] for p in ps)
-    assert "CPU" in titles and "DRBD" in titles
-    cpu = next(p for p in ps if "CPU" in p["title"])
-    assert "node_cpu_seconds_total" in cpu["targets"][0]["expr"]  # existing metric
-
-
-def test_net_section_per_plane_state_includes_the_wan_replication_plane():
-    ns = net_section(DS, y=0)
-    assert ns and all(p["type"] == "timeseries" for p in ns)
-    state = next(p for p in ns if "state" in p["title"].lower())
-    expr = state["targets"][0]["expr"]
-    assert "lab_network_state" in expr
-    assert "net-wan" in expr  # the DRBD replication plane is in scope
-
-
-def test_log_row_is_a_loki_logs_panel_scoped_to_cluster_nodes():
-    p = log_row("loki", y=0)
-    assert p["type"] == "logs"
-    assert p["datasource"] == {"type": "loki", "uid": "loki"}
-    expr = p["targets"][0]["expr"]
-    assert 'host=~"pcmk-' in expr  # scoped to cluster nodes
-    assert "${level}" in expr  # severity is a dashboard toggle (#219)
-
-
 def test_cluster_log_panels_exclude_the_event_stream():
     """The wildcard log selectors (.*mq.* / mq-.*) must not sweep in unit=mq-events (#517) —
     events are a separate stream and belong on the events panel, not the log panels."""
     from mqlab.clusterboard import _nativeha_log_row, _rdqm_log_row
 
     panels = (
-        log_row("loki", y=0),
         _nativeha_log_row("loki", y=0),
         _rdqm_log_row("loki", y=0, qm=RDQM_QM),
     )
@@ -151,7 +120,7 @@ def test_cluster_log_panels_exclude_the_event_stream():
 
 
 def test_log_severity_toggle_defaults_to_warn():
-    d = render_cluster_dashboard({}, arm="pcmk-ubuntu")
+    d = render_cluster_dashboard({}, arm="rdqm-rhel")
     level = next(v for v in d["templating"]["list"] if v["name"] == "level")
     assert level["current"]["text"] == "WARN+"  # defaults to WARN+
     opts = {o["text"] for o in level["options"]}
@@ -159,7 +128,7 @@ def test_log_severity_toggle_defaults_to_warn():
 
 
 def test_board_annotations_are_holder_agnostic():
-    d = render_cluster_dashboard({}, arm="pcmk-ubuntu")
+    d = render_cluster_dashboard({}, arm="rdqm-rhel")
     anns = d["annotations"]["list"]
     owner = next(a for a in anns if "owner" in a["name"].lower())
     # holder-agnostic: counts owners per resource, never the holder-labelled series
@@ -169,29 +138,9 @@ def test_board_annotations_are_holder_agnostic():
     assert owner["enable"] is True and owner["hide"] is True
 
 
-def test_board_has_uid_hero_integrity_and_the_two_matrices():
-    d = render_cluster_dashboard({}, arm="pcmk-ubuntu")
-    assert d["uid"] == "lab-pcmk-ubuntu-cluster"
-    by_title = {p["title"]: p for p in d["panels"]}
-    # hero band + integrity + the two matrices all present
-    assert "Cluster health" in by_title and "Integrity" in by_title
-    compute = by_title["② Compute — node × component"]
-    storage = by_title["③ Storage — DRBD / SAN"]
-    cols = compute["transformations"][1]["options"]["renameByName"]
-    assert {"Value #A", "Value #D"} <= set(cols)  # corosync .. fence present
-    # top-to-bottom: banner → ① row → hero → integrity → compute → storage (no overlap)
-    assert by_title["Cluster health"]["gridPos"]["y"] > 0  # below the banner + ① row
-    assert by_title["Integrity"]["gridPos"]["y"] < compute["gridPos"]["y"] < storage["gridPos"]["y"]
-    # a spelled-out title banner + a numbered ① section header at the very top (#219 feedback)
-    banner = next(p for p in d["panels"] if p["type"] == "text")
-    assert banner["gridPos"]["y"] == 0 and "Ubuntu" in banner["options"]["content"]
-    assert any(p["type"] == "row" and p["title"].startswith("①") for p in d["panels"])
-
-
 @pytest.mark.parametrize(
     ("arm", "label"),
     [
-        ("pcmk-ubuntu", "Ubuntu 26"),
         ("nativeha-ubuntu", "Ubuntu 26"),
         ("nativeha-rhel-crr", "RHEL 10"),
         ("rdqm-rhel", "RHEL 10"),
@@ -208,11 +157,16 @@ def test_title_banner_unknown_arm_carries_no_os_label():
     assert _title_banner("mystery", y=0)["options"]["content"] == "## Cluster · mystery"
 
 
+def test_unknown_arm_has_no_cockpit_board():
+    with pytest.raises(ValueError, match="no cockpit board for arm 'mystery'"):
+        render_cluster_dashboard({}, arm="mystery")
+
+
 # ── Native HA arm (#279) ──────────────────────────────────────────────────────
 
 
-def test_pcmk_integrity_panel_unchanged():
-    # regression: the PCMK integrity panel still carries the DRBD hazard expr, full-width
+def test_integrity_panel_is_a_full_width_drbd_hazard_light():
+    # the integrity panel carries the DRBD hazard expr, full-width
     p = integrity_panel("promtest", y=7)
     assert 'cluster_drbd_conn{conn="StandAlone"}' in p["targets"][0]["expr"]
     assert p["gridPos"]["w"] == 24
@@ -291,26 +245,9 @@ def test_nativeha_board_uid_sections_and_tags():
     # Site A scopes to a-nodes, Site B to b-nodes
     assert any('member=~"nha-rhel-crr-a.*"' in t["expr"] for t in site_a["targets"])
     assert any('member=~"nha-rhel-crr-b.*"' in t["expr"] for t in site_b["targets"])
-    # no PCMK-only plumbing leaks into the nativeha board
+    # no Pacemaker/DRBD plumbing leaks into the nativeha board
     blob = json.dumps(d)
     assert "corosync" not in blob and "cluster_drbd" not in blob and "iSCSI" not in blob
-
-
-def test_pcmk_board_still_renders_unchanged():
-    d = render_cluster_dashboard({}, arm="pcmk-ubuntu")
-    assert d["uid"] == "lab-pcmk-ubuntu-cluster"
-    titles = [p.get("title", "") for p in d["panels"]]
-    assert "② Compute — node × component" in titles
-    assert "③ Storage — DRBD / SAN" in titles
-
-
-def test_pcmk_board_scopes_shared_metrics_to_pcmk_groups():
-    # cluster_node_online / cluster_quorate are emitted by every arm — on the PCMK board every
-    # use must carry the pcmk group scope, else nha nodes leak in (#279).
-    blob = json.dumps(render_cluster_dashboard({}, arm="pcmk-ubuntu"))
-    for m in re.finditer(r"cluster_(?:node_online|quorate)(\{[^}]*\})?", blob):
-        sel = m.group(1) or ""
-        assert "pcmk_a|pcmk_b" in sel, f"unscoped shared metric on PCMK board: {m.group(0)}"
 
 
 def test_nativeha_board_scopes_shared_metrics_to_nha_groups():
@@ -324,12 +261,11 @@ def test_nativeha_board_scopes_shared_metrics_to_nha_groups():
         )
     for m in re.finditer(r"cluster_node_online(\{[^}]*\})?", blob):
         assert "nha-rhel-" in (m.group(1) or ""), "unscoped node_online on nha board"
-    assert "pcmk_a|pcmk_b" not in blob  # no PCMK scope leaks onto the nha board
 
 
 def test_nativeha_board_has_full_section_parity_minus_storage():
-    # the nha board carries everything after ② that PCMK has — CRR card, timeline, logs,
-    # perf, network — but NO storage (Native HA has no DRBD/SAN tier).
+    # the nha board carries everything after ② — CRR card, timeline, logs, perf,
+    # network — but NO storage (Native HA has no DRBD tier).
     d = render_cluster_dashboard({}, arm="nativeha-rhel-crr")
     titles = [p.get("title", "") for p in d["panels"]]
     types = {p["type"] for p in d["panels"]}
@@ -341,7 +277,7 @@ def test_nativeha_board_has_full_section_parity_minus_storage():
     assert any("CPU busy" in t for t in titles)  # perf
     assert any("CRR replication (net-wan)" in t for t in titles)  # perf net-wan
     assert any("network planes" in t.lower() for t in titles)  # net section
-    assert "③ Storage — DRBD / SAN" not in titles  # no storage section
+    assert not any("Storage" in t for t in titles)  # no storage section
     # the log severity toggle is wired (templating var present)
     assert d["templating"]["list"][0]["name"] == "level"
     # each named section is its own peer-level collapsible row (#279 feedback): one row per
@@ -363,12 +299,12 @@ def test_nativeha_log_panel_includes_ibm_mq_diagnostic_stream():
     assert 'host=~"nha-rhel-crr-.*"' in logs["targets"][0]["expr"]
 
 
-def test_nativeha_perf_uses_nha_groups_and_no_san_disk():
+def test_nativeha_perf_uses_nha_groups_and_no_disk_io():
     from mqlab.clusterboard import nativeha_perf_section
 
     blob = json.dumps(nativeha_perf_section("promtest", y=0))
     assert "nha_rhel_crr_a|nha_rhel_crr_b" in blob  # CPU scoped to nha nodes
-    assert "node_disk" not in blob  # no SAN disk I/O panel
+    assert "node_disk" not in blob  # no disk I/O panel
     assert "virbr-hb" in blob and "virbr-wan" in blob  # raft + CRR throughput
 
 
@@ -395,7 +331,7 @@ def test_nativeha_ubuntu_board_is_the_rhel_board_reparameterized():
     titles = [p.get("title", "") for p in d["panels"]]
     assert any("Cross-region replication (CRR)" in t for t in titles)
     assert any(t in ("Site A", "Site B") for t in titles)
-    assert "③ Storage — DRBD / SAN" not in titles
+    assert not any("Storage" in t for t in titles)
     # the logs panel names the Ubuntu QM and targets the ibm-mq diagnostic stream (#822)
     logs = next(p for p in d["panels"] if p["type"] == "logs")
     assert "NHAUAPP" in logs["description"]
@@ -560,11 +496,11 @@ def test_rdqm_status_band_is_one_compact_full_width_row():
     assert "count(cluster_rdqm_ha_status_ok) > 0" in integ
 
 
-def test_rdqm_integrity_is_pcmk_style_drbd_plus_ha_not_normal():
+def test_rdqm_integrity_is_drbd_hazards_plus_ha_not_normal():
     from mqlab.clusterboard import _rdqm_integrity_expr
 
     expr = _rdqm_integrity_expr()
-    # PCMK-style DRBD hazards: split-brain (StandAlone), Diskless, dual-primary
+    # DRBD hazards: split-brain (StandAlone), Diskless, dual-primary
     assert "StandAlone" in expr and "Diskless" in expr
     # dual-primary must be counted PER RESOURCE *AND PER SITE*: a DR pair legitimately has one
     # HA-resource primary on each side (2 globally), which must NOT read as split-brain (#287)
@@ -735,7 +671,7 @@ def test_rdqm_board_has_storage_dr_timeline_logs_perf_net():
     row_titles = [p["title"] for p in d["panels"] if p["type"] == "row"]
     assert any(t.startswith("①") for t in row_titles)
     assert any(t.startswith("②") for t in row_titles)
-    # pacemaker rides above storage (mirrors the PCMK/Ubuntu hierarchy), then DRBD storage, then DR
+    # pacemaker rides above storage, then DRBD storage, then DR
     assert any("③" in t and "Pacemaker" in t for t in row_titles)  # ③ pacemaker (above storage)
     assert any("④" in t and "Storage" in t for t in row_titles)  # ④ DRBD storage section
     assert any("⑤" in t and "DR" in t for t in row_titles)  # ⑤ cross-site DR
@@ -757,7 +693,7 @@ def test_rdqm_board_scopes_shared_metrics_to_rdqm_groups():
         assert "rdqm_a|rdqm_b" in (m.group(1) or ""), "unscoped quorate on rdqm board"
     for m in re.finditer(r"cluster_node_online(\{[^}]*\})?", blob):
         assert "rdqm-" in (m.group(1) or "") or "rdqm_a|rdqm_b" in (m.group(1) or "")
-    assert "pcmk_a|pcmk_b" not in blob and "nha_rhel" not in blob  # no other arm's scope
+    assert "nha_rhel" not in blob  # no other arm's scope
 
 
 def test_rdqm_log_panel_includes_ibm_mq_diagnostic_stream():
@@ -776,11 +712,8 @@ def test_rdqm_perf_uses_rdqm_groups_with_hb_and_wan():
     assert "virbr-hb" in blob and "virbr-wan" in blob  # HA (heartbeat) + DR (wan) throughput
 
 
-def test_pcmk_and_nativeha_boards_unchanged_by_rdqm_arm():
-    # regression: adding the rdqm arm must not alter the PCMK / Native HA boards
-    pcmk = render_cluster_dashboard({}, arm="pcmk-ubuntu")
-    assert pcmk["uid"] == "lab-pcmk-ubuntu-cluster"
-    assert "③ Storage — DRBD / SAN" in [p.get("title", "") for p in pcmk["panels"]]
+def test_nativeha_board_unchanged_by_rdqm_arm():
+    # regression: adding the rdqm arm must not alter the Native HA board
     nha = render_cluster_dashboard({}, arm="nativeha-rhel-crr")
     assert nha["uid"] == "lab-nativeha-rhel-crr-cluster"
     assert "rdqm" not in json.dumps(nha)  # no rdqm plumbing leaked onto the nha board

@@ -28,11 +28,10 @@ from tests.fakes import RecordingRunner, ScriptedResult
 # commons includes svc+app so all_vms covers the shared distributed-path VMs.
 TOPO = (
     "nodes:\n"
-    "  san-a: { box: san }\n"
-    "  pcmk-a1: { box: pcmk }\n"
-    "  pcmk-a2: { box: pcmk }\n"
-    "  pcmk-a3: { box: pcmk }\n"
-    "  pcmk-b1: { box: pcmk }\n"
+    "  nha-ubuntu-a1: { box: mq-nativeha }\n"
+    "  nha-ubuntu-a2: { box: mq-nativeha }\n"
+    "  nha-ubuntu-a3: { box: mq-nativeha }\n"
+    "  nha-ubuntu-b1: { box: mq-nativeha }\n"
     "  rdqm-a1: { box: mq-rdqm }\n"
     "  rdqm-a2: { box: mq-rdqm }\n"
     "  rdqm-a3: { box: mq-rdqm }\n"
@@ -41,31 +40,30 @@ TOPO = (
     "  svc-sim: { box: mq-client }\n"
     "  app-client: { box: mq-client }\n"
     "groups:\n"
-    "  san_a:   [san-a]\n"
-    "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
-    "  pcmk_b:  [pcmk-b1]\n"
+    "  nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2, nha-ubuntu-a3]\n"
+    "  nha_ubuntu_b: [nha-ubuntu-b1]\n"
     "  rdqm_a:  [rdqm-a1, rdqm-a2, rdqm-a3]\n"
     "  obs_box: [obs]\n"
     "  probe:   [mon-probe]\n"
     "  svc:     [svc-sim]\n"
     "  app:     [app-client]\n"
     "stacks:\n"
-    "  pcmk-ubuntu:\n"
-    "    mechanism: pacemaker-san\n"
+    "  nativeha-ubuntu:\n"
+    "    mechanism: native-ha\n"
     "    os_family: ubuntu\n"
-    "    short: PCMK\n"
-    "    cluster_group: pcmk_a\n"
-    "    groups: [san_a, pcmk_a, pcmk_b]\n"
-    "    provision: ansible/site-pcmk.yml\n"
-    "    secrets: [pcmk_hacluster_password, mqweb_admin_password]\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
+    "    short: NHAU\n"
+    "    cluster_group: nha_ubuntu_a\n"
+    "    groups: [nha_ubuntu_a, nha_ubuntu_b]\n"
+    "    provision: ansible/site-nativeha-ubuntu.yml\n"
+    "    secrets: [mqweb_aes_passphrase, mqweb_admin_password]\n"
+    "    qm: { svc_conn: 10.60.0.50 }\n"
     "    alloc:\n"
     "      exporter_app_port: 9157\n"
     "      exporter_svc_port: 9158\n"
-    "      app_unit: app-pcmk\n"
+    "      app_unit: app-nhau\n"
     "      svc_port: 1414\n"
     "    verbs:\n"
-    "      qm-status:  { pcs: 'status resources' }\n"
+    "      qm-status:  { cmd: 'dspmq -m {qm}' }\n"
     "  rdqm-rhel:\n"
     "    mechanism: rdqm\n"
     "    os_family: rhel\n"
@@ -74,7 +72,7 @@ TOPO = (
     "    groups: [rdqm_a]\n"
     "    provision: ansible/site-rdqm.yml\n"
     "    secrets: [mqweb_admin_password]\n"
-    "    qm: { vip: 10.10.2.200, vip_ext: 10.60.0.20, svc_conn: 10.60.0.60 }\n"
+    "    qm: { vip: 10.10.2.200, svc_conn: 10.60.0.60 }\n"
     "    alloc:\n"
     "      exporter_app_port: 9159\n"
     "      exporter_svc_port: 9160\n"
@@ -137,11 +135,10 @@ def _stub_probe_states(monkeypatch, domain_states=None):
     if domain_states is None:
         # All VMs running — _plan_destroy will plan force-off + undefine for each.
         vms = [
-            "san-a",
-            "pcmk-a1",
-            "pcmk-a2",
-            "pcmk-a3",
-            "pcmk-b1",
+            "nha-ubuntu-a1",
+            "nha-ubuntu-a2",
+            "nha-ubuntu-a3",
+            "nha-ubuntu-b1",
             "rdqm-a1",
             "rdqm-a2",
             "rdqm-a3",
@@ -261,8 +258,9 @@ def _dom_listing(states):
 def test_other_stacks_up_returns_true_when_another_live(monkeypatch, tmp_path):
     """Returns True when a member VM of another stack is running."""
     _seed(monkeypatch, tmp_path)
-    # pcmk-ubuntu has a running member; we exclude rdqm-rhel, so pcmk-ubuntu is probed
-    runner = RecordingRunner(results=[_dom_listing({"pcmk-a1": "running"})])
+    # nativeha-ubuntu has a running member; we exclude rdqm-rhel, so nativeha-ubuntu is
+    # probed
+    runner = RecordingRunner(results=[_dom_listing({"nha-ubuntu-a1": "running"})])
     deps = _deps(runner)
     result = cli._other_stacks_up(deps, exclude="rdqm-rhel")
     assert result is True
@@ -541,11 +539,11 @@ def test_teardown_deletes_record(monkeypatch, tmp_path):
 def test_teardown_deletes_only_its_own_record(monkeypatch, tmp_path):
     _teardown_harness(monkeypatch, tmp_path, RecordingRunner(results=[]))
     _capture_steps(monkeypatch)
-    other = InstanceRecord("pcmk-ubuntu", OsRef("ubuntu", 24), None, "t")
+    other = InstanceRecord("nativeha-ubuntu", OsRef("ubuntu", 24), None, "t")
     instances.write_record(_RDQM_RECORD)
     instances.write_record(other)
     assert CliRunner().invoke(cli.app, ["teardown", "rdqm-rhel"]).exit_code == 0
-    assert instances.read_record("pcmk-ubuntu") == other
+    assert instances.read_record("nativeha-ubuntu") == other
 
 
 def test_teardown_works_without_record(monkeypatch, tmp_path):

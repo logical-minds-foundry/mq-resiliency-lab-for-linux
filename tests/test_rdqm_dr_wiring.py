@@ -1,8 +1,8 @@
 """The rdqm-rhel app and partner links reach the QM at either site after a DR cutover (#1622).
 
-The RDQM arm's mirror of the #1428 pdrbd fix (tests/test_pdrbd_qm_role.py). There, a live
-cutover held RPO-0 but e2e then failed 5/5 with MQRC 2538: app_conn named only the site-A VIP,
-and the SVC sender's CONNAME named only site-A net-ext nodes, the only nodes with a net-ext NIC.
+A live cutover can hold RPO-0 yet fail e2e 5/5 with MQRC 2538 when app_conn names only the
+site-A VIP, and the SVC sender's CONNAME names only site-A net-ext nodes (the only nodes with a
+net-ext NIC). This pins both links to reach either site.
 Pinned statically; the live check (cutover --rpo0-drill, then qm e2e at site B and after
 failback) needs the x86 CloudLab.
 """
@@ -73,7 +73,7 @@ def test_authz_validate_harness_uses_the_same_app_conn() -> None:
 
 def test_every_lab_address_is_unique() -> None:
     # Adding site-B net-ext (#1622) must not reuse an address another node NIC or a
-    # stack's floating IP (qm.vip / vip_b / vip_ext / vip_ext_b) already holds.
+    # stack's floating IP (qm.vip / vip_b) already holds.
     topo = _load(TOPOLOGY)
     seen: dict[str, list[str]] = collections.defaultdict(list)
     for host, spec in topo["nodes"].items():

@@ -2,7 +2,7 @@
 its OS-as-only-variable peer nativeha-ubuntu (#417).
 
 Each stack is ONE consolidated full-HADR stack (not the older _ha/_dr triple), and —
-unlike RDQM/Pacemaker — Native HA has no floating VIP, so the QM must parse without one.
+unlike RDQM — Native HA has no floating VIP, so the QM must parse without one.
 The two arms share the mqmonitor@ verbs/mechanism; only OS, groups, QM names, and the
 provision playbook differ.
 """
@@ -158,7 +158,7 @@ def test_nativeha_ubuntu_node_groups_and_host_resolved_platform():
     # The nodes boot the baked Ubuntu mq-nativeha box (#103 T6), but host-arch resolution
     # is PRESERVED — it lives at the box layer: unlike the x86-pinned RHEL entry, the
     # Ubuntu catalog entry carries NO arch pin, so the box tracks the host arch (native
-    # arm64 on the Mac) and can coexist with pcmk-ubuntu.
+    # arm64 on the Mac).
     cat = load_catalog()
     assert cat.oses[cat.default_os("nativeha-ubuntu")].arch_pin is None
 
@@ -198,7 +198,7 @@ def test_nativeha_arms_use_collision_free_resources():
     assert ubuntu.alloc["exporter_app_port"] != rhel.alloc["exporter_app_port"]
     assert "exporter_svc_port" not in ubuntu.alloc and "exporter_svc_port" not in rhel.alloc
     assert ubuntu.alloc["app_unit"] != rhel.alloc["app_unit"]
-    # no IP collision across ALL node NICs in the topology (the pcmk-ubuntu arm runs too)
+    # no IP collision across ALL node NICs in the topology (the other arms run too)
     topo = _topology()
     nodes = topo["nodes"]
     ubuntu_hosts = set(topo["groups"]["nha_ubuntu_a"]) | set(topo["groups"]["nha_ubuntu_b"])

@@ -8,10 +8,10 @@ from mqlab import mqweb_endpoints as ep
 def _topo():
     return {
         "stacks": {
-            "pcmk-ubuntu": {
-                "cluster_group": "pcmk_a",
-                "groups": ["pcmk_a", "pcmk_b"],
-                "qm": {"vip": "10.10.1.200", "vip_b": "10.10.2.200"},
+            "rdqm-rhel": {
+                "cluster_group": "rdqm_a",
+                "groups": ["rdqm_a", "rdqm_b"],
+                "qm": {"vip": "10.10.1.100", "vip_b": "10.10.2.100"},
             },
             "nativeha-ubuntu": {
                 "cluster_group": "nha_ubuntu_a",
@@ -20,7 +20,7 @@ def _topo():
             },
         },
         "groups": {
-            "pcmk_a": ["pcmk-a1"],
+            "rdqm_a": ["rdqm-a1"],
             "nha_ubuntu_a": ["nha-ubuntu-a1", "nha-ubuntu-a2"],
             "nha_ubuntu_b": ["nha-ubuntu-b1"],
         },
@@ -35,10 +35,10 @@ def _topo():
 
 def test_vip_stack_yields_both_site_endpoints():
     recs = {r["stack"]: r for r in ep.mqweb_endpoints(_topo())}
-    assert recs["pcmk-ubuntu"]["kind"] == "vip"
-    assert recs["pcmk-ubuntu"]["endpoints"] == {
-        "site-a": ["https://10.10.1.200:9443"],
-        "site-b": ["https://10.10.2.200:9443"],
+    assert recs["rdqm-rhel"]["kind"] == "vip"
+    assert recs["rdqm-rhel"]["endpoints"] == {
+        "site-a": ["https://10.10.1.100:9443"],
+        "site-b": ["https://10.10.2.100:9443"],
     }
 
 
@@ -95,7 +95,6 @@ def test_absent_svc_sim_yields_no_counterparty_record():
 
 def test_lab_mqweb_endpoints_reads_real_topology():
     recs = {r["stack"]: r for r in ep.lab_mqweb_endpoints()}
-    # Real topology (rdqm vip_b declared in #540): both VIP stacks have site-a+site-b.
-    assert recs["pcmk-ubuntu"]["endpoints"]["site-b"] == ["https://10.10.2.200:9443"]
+    # Real topology (rdqm vip_b declared in #540): the VIP stack has site-a+site-b.
     assert recs["rdqm-rhel"]["endpoints"]["site-b"] == ["https://10.10.2.100:9443"]
     assert recs["svc-sim"]["kind"] == "counterparty"

@@ -19,13 +19,10 @@ from typing import Any
 
 import yaml
 
-from mqlab.versions import OsRef, load_catalog
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANSIBLE = REPO_ROOT / "ansible"
 ROLE = ANSIBLE / "roles" / "drbd9"
 BAKE = ANSIBLE / "bake-pdrbd-ubuntu.yml"
-CATALOG = REPO_ROOT / "lab" / "versions.yaml"
 
 
 def _tasks(name: str) -> list[dict[str, Any]]:
@@ -54,31 +51,6 @@ def _role_includes(play: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 # --- catalog + builder wiring ------------------------------------------------------------
-
-
-def test_pdrbd_box_role_is_catalogued() -> None:
-    cat = load_catalog(CATALOG)
-    assert cat.roles["pdrbd"]["bake"] == {"ubuntu": "pdrbd-ubuntu"}
-    assert cat.roles["pdrbd"]["components"] == ("mq-resiliency-observability",)
-
-
-def test_pdrbd_is_mq_bearing_because_it_bakes_mq() -> None:
-    """The box bakes MQ through mq-install, whose skip-if-baked guard keys on presence
-    only: a pin bump must flip the manifest hash (#1087) or a node boots the old MQ."""
-    entry = load_catalog(CATALOG).box("pdrbd", OsRef("ubuntu", 24))
-    assert (entry.name, entry.bake_stem, entry.mq_bearing) == (
-        "pdrbd-ubuntu24",
-        "pdrbd-ubuntu",
-        True,
-    )
-
-
-def test_build_fatbox_stages_mq_media_for_pdrbd() -> None:
-    text = (REPO_ROOT / "lab" / "boxes" / "build-fatbox.sh").read_text(encoding="utf-8")
-    assert "  mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu | pdrbd-ubuntu)" in text
-
-
-# --- the bake playbook ---------------------------------------------------------------------
 
 
 def test_bake_playbook_bakes_drbd9_install_half_and_mq() -> None:

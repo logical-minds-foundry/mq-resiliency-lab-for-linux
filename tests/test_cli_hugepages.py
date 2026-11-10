@@ -94,7 +94,7 @@ def _bootstrap(monkeypatch, tmp_path, runner, *args, topo=boot.TOPO + LEVER, sta
     deps, buf = _perf_deps(runner)
     monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
     boot._stub_ensure(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", *args])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", *args])
     return result, buf
 
 
@@ -133,13 +133,13 @@ def test_bootstrap_reserves_before_any_vagrant_up_and_reports_it(monkeypatch, tm
 def test_bootstrap_sizes_only_guests_not_yet_running(monkeypatch, tmp_path):
     _meminfo(monkeypatch, tmp_path)
     states = boot._states(net=True, vms=False)
-    states["domains"] = {"lab_obs": "running", "lab_san-a": "shut off"}
+    states["domains"] = {"lab_obs": "running", "lab_nha-ubuntu-a1": "shut off"}
     runner = _ArgvRunner()
     result, _ = _bootstrap(monkeypatch, tmp_path, runner, "--no-dr", states=states)
     assert result.exit_code == 0, result.output
     reserve = runner.recorded[_argv_index(runner, lambda a: hugepages.PLAYBOOK in a)]
-    # --no-dr: pcmk-b1 is not booted; obs is live (holds its pages); san-a is shut off.
-    assert reserve.argv[-1] == f"hugepages_needed={7 * 512 + hugepages.MARGIN_PAGES}"
+    # --no-dr: site B is not booted; obs is live (holds its pages); a1 is shut off.
+    assert reserve.argv[-1] == f"hugepages_needed={6 * 512 + hugepages.MARGIN_PAGES}"
 
 
 def test_bootstrap_notes_a_reclaim_retry(monkeypatch, tmp_path):
@@ -272,7 +272,7 @@ def _teardown(monkeypatch, tmp_path, *, other_up, commons=False, topo=tear.TOPO 
     runner = _ArgvRunner()
     deps, buf = _perf_deps(runner)
     monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
-    args = ["teardown", "pcmk-ubuntu", *(["--commons"] if commons else [])]
+    args = ["teardown", "nativeha-ubuntu", *(["--commons"] if commons else [])]
     result = CliRunner().invoke(cli.app, args)
     return result, runner, buf, calls
 
@@ -298,7 +298,7 @@ def test_other_stack_up_keeps_the_pages(monkeypatch, tmp_path):
 def test_forced_commons_teardown_still_keeps_pages_under_running_guests(monkeypatch, tmp_path):
     result, runner, _, calls = _teardown(monkeypatch, tmp_path, other_up=True, commons=True)
     assert result.exit_code == 0, result.output
-    assert calls == ["pcmk-ubuntu"]  # the reference count is probed for the release
+    assert calls == ["nativeha-ubuntu"]  # the reference count is probed for the release
     assert not _released(runner)
 
 

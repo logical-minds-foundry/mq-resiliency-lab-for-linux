@@ -41,17 +41,17 @@ MAC_B1_HB = "52:54:00:bb:01:01"
 MAC_OTHER = "52:54:00:cc:01:01"
 
 DOMAINS = {
-    "lab_pdrbd-a1": _iflist(
+    "lab_rdqm-a1": _iflist(
         ("vnet0", "vagrant-libvirt", "52:54:00:aa:00:01"),
         ("vnet1", "net-hb-a", MAC_A1_HB),
         ("vnet2", "net-wan", "52:54:00:aa:02:01"),
     ),
-    "lab_pdrbd-a2": _iflist(
+    "lab_rdqm-a2": _iflist(
         ("vnet3", "vagrant-libvirt", "52:54:00:aa:00:02"),
         ("vnet4", "net-hb-a", MAC_A2_HB),
         ("vnet5", "net-wan", "52:54:00:aa:02:02"),
     ),
-    "lab_pdrbd-b1": _iflist(
+    "lab_rdqm-b1": _iflist(
         ("vnet6", "vagrant-libvirt", "52:54:00:bb:00:01"),
         ("vnet7", "net-hb-b", MAC_B1_HB),
         ("vnet8", "net-wan", "52:54:00:bb:02:01"),
@@ -59,9 +59,9 @@ DOMAINS = {
     # Not a lab domain: never touched, even though it sits on net-hb-a.
     "other-vm": _iflist(("vnet9", "net-hb-a", MAC_OTHER)),
     # A lab domain that is defined but shut off.
-    "lab_pdrbd-a3": _iflist(("-", "net-hb-a", "52:54:00:aa:01:03")),
+    "lab_rdqm-a3": _iflist(("-", "net-hb-a", "52:54:00:aa:01:03")),
 }
-RUNNING = ["lab_pdrbd-a1", "lab_pdrbd-a2", "lab_pdrbd-b1", "other-vm"]
+RUNNING = ["lab_rdqm-a1", "lab_rdqm-a2", "lab_rdqm-b1", "other-vm"]
 
 VIRSH = """\
 echo "virsh $*" >> "$FIX/calls.log"
@@ -148,16 +148,16 @@ def test_down_then_up_cuts_and_restores_every_running_lab_guest_on_the_net(lab: 
 
     assert down.returncode == 0, down.stderr
     assert _setlinks(lab) == [
-        f"virsh -c qemu:///system domif-setlink lab_pdrbd-a1 {MAC_A1_HB} down",
-        f"virsh -c qemu:///system domif-setlink lab_pdrbd-a2 {MAC_A2_HB} down",
+        f"virsh -c qemu:///system domif-setlink lab_rdqm-a1 {MAC_A1_HB} down",
+        f"virsh -c qemu:///system domif-setlink lab_rdqm-a2 {MAC_A2_HB} down",
     ]
-    assert _link(lab, "lab_pdrbd-a1", MAC_A1_HB) == "down"
-    assert _link(lab, "lab_pdrbd-a2", MAC_A2_HB) == "down"
+    assert _link(lab, "lab_rdqm-a1", MAC_A1_HB) == "down"
+    assert _link(lab, "lab_rdqm-a2", MAC_A2_HB) == "down"
     # Other networks, other sites, and non-lab domains are left alone.
-    assert _link(lab, "lab_pdrbd-b1", MAC_B1_HB) is None
+    assert _link(lab, "lab_rdqm-b1", MAC_B1_HB) is None
     assert _link(lab, "other-vm", MAC_OTHER) is None
     # Each virsh action is echoed verbatim, and the verified state reported.
-    for dom, mac in (("lab_pdrbd-a1", MAC_A1_HB), ("lab_pdrbd-a2", MAC_A2_HB)):
+    for dom, mac in (("lab_rdqm-a1", MAC_A1_HB), ("lab_rdqm-a2", MAC_A2_HB)):
         assert f"+ virsh -c qemu:///system domif-setlink {dom} {mac} down" in down.stdout
         assert f"+ virsh -c qemu:///system domif-getlink {dom} {mac}" in down.stdout
         assert f"down: {dom} {mac} (net-hb-a)" in down.stdout
@@ -165,9 +165,9 @@ def test_down_then_up_cuts_and_restores_every_running_lab_guest_on_the_net(lab: 
     up = _run(lab, "up", "net-hb-a")
 
     assert up.returncode == 0, up.stderr
-    assert _link(lab, "lab_pdrbd-a1", MAC_A1_HB) == "up"
-    assert _link(lab, "lab_pdrbd-a2", MAC_A2_HB) == "up"
-    assert f"up: lab_pdrbd-a2 {MAC_A2_HB} (net-hb-a)" in up.stdout
+    assert _link(lab, "lab_rdqm-a1", MAC_A1_HB) == "up"
+    assert _link(lab, "lab_rdqm-a2", MAC_A2_HB) == "up"
+    assert f"up: lab_rdqm-a2 {MAC_A2_HB} (net-hb-a)" in up.stdout
     # The network itself is never destroyed or redefined.
     assert not [c for c in _calls(lab) if " net-" in c.split("qemu:///system", 1)[-1]]
 
@@ -177,33 +177,33 @@ def test_wan_cut_covers_every_site(lab: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert [c.split()[-3] for c in _setlinks(lab)] == [
-        "lab_pdrbd-a1",
-        "lab_pdrbd-a2",
-        "lab_pdrbd-b1",
+        "lab_rdqm-a1",
+        "lab_rdqm-a2",
+        "lab_rdqm-b1",
     ]
 
 
 def test_named_nodes_limit_the_cut(lab: Path) -> None:
-    result = _run(lab, "down", "net-hb-a", "pdrbd-a2")
+    result = _run(lab, "down", "net-hb-a", "rdqm-a2")
 
     assert result.returncode == 0, result.stderr
     assert _setlinks(lab) == [
-        f"virsh -c qemu:///system domif-setlink lab_pdrbd-a2 {MAC_A2_HB} down",
+        f"virsh -c qemu:///system domif-setlink lab_rdqm-a2 {MAC_A2_HB} down",
     ]
-    assert _link(lab, "lab_pdrbd-a1", MAC_A1_HB) is None
+    assert _link(lab, "lab_rdqm-a1", MAC_A1_HB) is None
 
 
 def test_a_guest_with_two_nics_on_the_net_gets_both_cut(lab: Path) -> None:
     second = "52:54:00:aa:01:99"
-    (lab / "domiflist" / "lab_pdrbd-a1").write_text(
+    (lab / "domiflist" / "lab_rdqm-a1").write_text(
         _iflist(("vnet1", "net-hb-a", MAC_A1_HB), ("vnet10", "net-hb-a", second))
     )
 
-    result = _run(lab, "down", "net-hb-a", "pdrbd-a1")
+    result = _run(lab, "down", "net-hb-a", "rdqm-a1")
 
     assert result.returncode == 0, result.stderr
-    assert _link(lab, "lab_pdrbd-a1", MAC_A1_HB) == "down"
-    assert _link(lab, "lab_pdrbd-a1", second) == "down"
+    assert _link(lab, "lab_rdqm-a1", MAC_A1_HB) == "down"
+    assert _link(lab, "lab_rdqm-a1", second) == "down"
 
 
 @pytest.mark.parametrize(
@@ -242,27 +242,27 @@ def test_no_running_lab_domain_fails_loud(lab: Path) -> None:
 
 
 def test_a_named_node_off_the_net_fails_before_any_link_changes(lab: Path) -> None:
-    # pdrbd-a1 is resolvable, but pdrbd-b1 has no net-hb-a NIC: nothing is cut.
-    result = _run(lab, "down", "net-hb-a", "pdrbd-a1", "pdrbd-b1")
+    # rdqm-a1 is resolvable, but rdqm-b1 has no net-hb-a NIC: nothing is cut.
+    result = _run(lab, "down", "net-hb-a", "rdqm-a1", "rdqm-b1")
 
     assert result.returncode == 1
-    assert "lab_pdrbd-b1 has no interface on net-hb-a" in result.stderr
+    assert "lab_rdqm-b1 has no interface on net-hb-a" in result.stderr
     assert _setlinks(lab) == []
 
 
 def test_a_named_node_that_is_not_running_fails_loud(lab: Path) -> None:
-    result = _run(lab, "down", "net-hb-a", "pdrbd-a3")
+    result = _run(lab, "down", "net-hb-a", "rdqm-a3")
 
     assert result.returncode == 1
-    assert "lab_pdrbd-a3 is 'shut off', not running" in result.stderr
+    assert "lab_rdqm-a3 is 'shut off', not running" in result.stderr
     assert _setlinks(lab) == []
 
 
 def test_an_unknown_named_node_fails_loud(lab: Path) -> None:
-    result = _run(lab, "down", "net-hb-a", "pdrbd-zz")
+    result = _run(lab, "down", "net-hb-a", "rdqm-zz")
 
     assert result.returncode == 1
-    assert "virsh domstate lab_pdrbd-zz failed" in result.stderr
+    assert "virsh domstate lab_rdqm-zz failed" in result.stderr
     assert _setlinks(lab) == []
 
 
@@ -276,12 +276,12 @@ def test_a_failed_list_fails_loud(lab: Path) -> None:
 
 
 def test_a_failed_domiflist_fails_loud(lab: Path) -> None:
-    (lab / "domiflist" / "lab_pdrbd-a2").unlink()
+    (lab / "domiflist" / "lab_rdqm-a2").unlink()
 
     result = _run(lab, "down", "net-hb-a")
 
     assert result.returncode == 1
-    assert "virsh domiflist lab_pdrbd-a2 failed" in result.stderr
+    assert "virsh domiflist lab_rdqm-a2 failed" in result.stderr
     assert _setlinks(lab) == []
 
 
@@ -294,24 +294,24 @@ def test_a_failed_domiflist_fails_loud(lab: Path) -> None:
     ],
 )
 def test_unexpected_domiflist_output_fails_loud(lab: Path, out: str, what: str) -> None:
-    (lab / "domiflist" / "lab_pdrbd-a1").write_text(out)
+    (lab / "domiflist" / "lab_rdqm-a1").write_text(out)
 
     result = _run(lab, "down", "net-hb-a")
 
     assert result.returncode == 1
-    assert f"unexpected domiflist {what} for lab_pdrbd-a1" in result.stderr
+    assert f"unexpected domiflist {what} for lab_rdqm-a1" in result.stderr
     assert _setlinks(lab) == []
 
 
 def test_a_failed_setlink_fails_loud_and_stops(lab: Path) -> None:
-    (lab / "fail-setlink").write_text(f"lab_pdrbd-a1 {MAC_A1_HB}\n")
+    (lab / "fail-setlink").write_text(f"lab_rdqm-a1 {MAC_A1_HB}\n")
 
     result = _run(lab, "down", "net-hb-a")
 
     assert result.returncode == 1
-    assert f"domif-setlink lab_pdrbd-a1 {MAC_A1_HB} down failed" in result.stderr
+    assert f"domif-setlink lab_rdqm-a1 {MAC_A1_HB} down failed" in result.stderr
     assert len(_setlinks(lab)) == 1, "no further links are touched after a failure"
-    assert _link(lab, "lab_pdrbd-a2", MAC_A2_HB) is None
+    assert _link(lab, "lab_rdqm-a2", MAC_A2_HB) is None
 
 
 @pytest.mark.parametrize(
@@ -330,7 +330,7 @@ def test_getlink_not_reporting_the_requested_state_fails_loud(lab: Path, out: st
     result = _run(lab, "down", "net-hb-a")
 
     assert result.returncode == 1
-    assert f"domif-getlink lab_pdrbd-a1 {MAC_A1_HB} reported" in result.stderr
+    assert f"domif-getlink lab_rdqm-a1 {MAC_A1_HB} reported" in result.stderr
     assert "expected 'down'" in result.stderr
 
 
@@ -340,7 +340,7 @@ def test_a_failed_getlink_fails_loud(lab: Path) -> None:
     result = _run(lab, "down", "net-hb-a")
 
     assert result.returncode == 1
-    assert f"domif-getlink lab_pdrbd-a1 {MAC_A1_HB} failed" in result.stderr
+    assert f"domif-getlink lab_rdqm-a1 {MAC_A1_HB} failed" in result.stderr
 
 
 def test_net_down_warns_it_is_not_a_fault_injector() -> None:

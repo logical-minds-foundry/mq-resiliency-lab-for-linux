@@ -588,8 +588,8 @@ def _obs_manifest_args() -> list[str]:
 
 
 def _obs_exporter_args() -> list[str]:
-    # The probe runs one mq_prometheus pair PER STACK on the alloc ports (#423), no
-    # longer pcmk-pinned. site-obs.yml loops the mq-exporter role over this list; the
+    # The probe runs one mq_prometheus pair PER STACK on the alloc ports (#423).
+    # site-obs.yml loops the mq-exporter role over this list; the
     # per-stack QM/conn/port derivation is a pure function of topology (mqlab.scrape).
     from mqlab.scrape import lab_mq_exporters, mq_exporters_path
 
@@ -1760,7 +1760,7 @@ def _probe_net_states(deps: Deps) -> dict[str, str]:
 
 def _source_secret(deps: Deps, name: str) -> str:
     # Auto-generated lab secret -> its value, injected into the provision playbook
-    # env (the roles read e.g. PCMK_HACLUSTER_PASSWORD via lookup('env', ...)). No
+    # env (the roles read e.g. MQWEB_AES_PASSPHRASE via lookup('env', ...)). No
     # hiding: the lab is a throwaway illusion, so this echoes + tees like any other
     # step. lab-secret.sh generates+persists once. (#373: restores the pre-#350 path
     # the cutover dropped with the old `vm provision`.)
@@ -1785,7 +1785,7 @@ def _stack_provision_env(deps: Deps, stack: Stack) -> dict[str, str]:
     """The environment a stack's provision playbook needs, sourced once per run.
 
     Each of the stack's `secrets:` is exported under its uppercased name (#373): the
-    roles read e.g. PCMK_HACLUSTER_PASSWORD and MQWEB_AES_PASSPHRASE via
+    roles read e.g. MQWEB_AES_PASSPHRASE via
     lookup('env', ...). MQWEB_STATE_DIR is the mqweb encode-once store (epic
     .github#341 spec §2.2, #1500): the mqweb role persists the server's AES key and each
     securityUtility-encoded password there, so a re-provision renders mqwebuser.xml
@@ -1969,9 +1969,9 @@ def vm_starvation(since: _StarvationSince = "") -> None:
 
 
 # --- qm: the MQ queue-manager lifecycle, dispatched off the stack's verbs (#350) --
-# create/destroy run the stack's qm-* playbooks (the client-reproducible deliverable);
-# up/down/status are direct, streamed shell ops on the stack's cluster first node
-# (pcs for pcmk, rdqm*/systemctl for the others). The verb implementations live on
+# create runs the stack's qm-create playbook or script (the client-reproducible
+# deliverable); up/down/status are direct, streamed shell ops on the stack's cluster
+# first node (rdqm*/systemctl). The verb implementations live on
 # the canonical Stack (stack.verbs), so a single dispatch covers every mechanism.
 
 
@@ -1996,7 +1996,7 @@ def _render_inventory(deps: Deps) -> None:
 
 
 def _qm_playbook(stack: Stack, playbook: str, verb: str) -> None:
-    # create/destroy: pre-flight members running -> render inventory -> run the play.
+    # create: pre-flight members running -> render inventory -> run the play.
     qm = stack.qm
     members = stack_members(stack.name) or []
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
@@ -2023,8 +2023,6 @@ def _qm_playbook(stack: Stack, playbook: str, verb: str) -> None:
                     f"qm_name={qm.qm_app}",
                     "-e",
                     f"qm_vip={qm.vip}",
-                    "-e",
-                    f"qm_vip_ext={qm.vip_ext}",
                     "-e",
                     f"qm_app={qm.qm_app}",
                     "-e",
@@ -2080,9 +2078,8 @@ def _qm_cmd_targets(deps: Deps, stack: Stack, verb: str) -> list[tuple[str, str 
 
 def _qm_cluster_cmd(stack: Stack, shell_cmd: str, verb: str) -> None:
     # up/down/status: a single streamed shell op on the stack's cluster first node
-    # (pcs for pcmk, rdqm*/systemctl for the others). No pre-flight — if the cluster
-    # is unreachable, ansible's own error speaks (#109). cluster_group is the correct
-    # probe target — NOT groups[0], which may be a SAN host with no MQ tooling.
+    # (rdqm*/systemctl). No pre-flight — if the cluster is unreachable, ansible's own
+    # error speaks (#109). cluster_group is the probe target.
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         _render_inventory(deps)
@@ -2145,7 +2142,7 @@ def _qm_script(stack: Stack, script: str, verb: str) -> None:
 def _qm_dispatch(stack_name: str, verb: str) -> None:
     # Validate the stack (exists + has a QM) for clean exit-2 messages, then resolve
     # the stack's implementation of the verb from its verbs dict and run it. The verb
-    # kinds (playbook/pcs/cmd/script) mirror the per-mechanism shapes (#202, #216).
+    # kinds (playbook/cmd/script) mirror the per-mechanism shapes (#202, #216).
     stack = _stack_qm_or_exit(stack_name)
     qm = stack.qm
     impl = stack.verbs.get(verb)
@@ -2156,8 +2153,6 @@ def _qm_dispatch(stack_name: str, verb: str) -> None:
     [(kind, value)] = impl.items()
     if kind == "playbook":
         _qm_playbook(stack, value, verb)
-    elif kind == "pcs":
-        _qm_cluster_cmd(stack, f"pcs {value}", verb)
     elif kind == "cmd":
         _qm_cluster_cmd(stack, str(value).format(qm=qm.qm_app, vip=qm.vip), verb)
     elif kind == "script":
@@ -2171,12 +2166,6 @@ def _qm_dispatch(stack_name: str, verb: str) -> None:
 def qm_create(stack: str) -> None:
     """Create the queue manager + its HA resources (stack-dispatched)."""
     _qm_dispatch(stack, "qm-create")
-
-
-@qm_app.command("destroy")
-def qm_destroy(stack: str) -> None:
-    """Remove the queue manager + its HA resources."""
-    _qm_dispatch(stack, "qm-destroy")
 
 
 @qm_app.command("up")
@@ -2200,8 +2189,7 @@ def qm_status(stack: str) -> None:
 # --- qm reload: restart the active QM, telling reconnectable clients to reconnect (#1514) --
 # IBM's `endmqm -r` semantics, through the per-mechanism IBM-documented path. The stack's
 # `qm-reload` verb is either a playbook (site-qm-reload.yml: locate the one Running
-# instance, restart it, wait for dspmq to show it back, report the elapsed time) or a
-# `refuse` reason for an arm where no honest reconnect-restart exists (Pacemaker).
+# instance, restart it, wait for dspmq to show it back, report the elapsed time).
 _QM_RELOAD = "qm-reload"
 
 _ReloadTimeout = Annotated[
@@ -2248,9 +2236,6 @@ def _qm_reload_run(stack_name: str, timeout: int) -> None:
         typer.echo(f"stack {stack_name} does not implement verb {_QM_RELOAD!r}", err=True)
         raise typer.Exit(code=2)
     [(kind, value)] = impl.items()
-    if kind == "refuse":
-        typer.echo(f"mqlab qm reload {stack_name}: refused — {value}", err=True)
-        raise typer.Exit(code=2)
     if kind != "playbook":
         typer.echo(f"mqlab qm reload {stack_name}: unsupported verb kind {kind!r}", err=True)
         raise typer.Exit(code=2)
@@ -2822,9 +2807,7 @@ def _probe_qm_up(deps: Deps, stack: Stack, domains: dict[str, str]) -> bool:
     qm commands use) and runs that status command on the cluster's first node via
     `ansible <cluster_group>[0] -b -m shell`. Exit 0 ⇒ provisioned + up.
 
-    Uses `stack.cluster_group` (e.g. "pcmk_a", "rdqm_a") — NOT `stack.groups[0]`,
-    which for pcmk-ubuntu is the SAN iSCSI-target host ("san_a") that has no
-    Pacemaker or MQ tooling and would always return a non-zero exit code.
+    Uses `stack.cluster_group` (e.g. "rdqm_a"), the stack's QM-bearing group.
 
     A stack with no qm-status verb or no cluster_group (reserved stack) is, by
     definition, not provisioned — returns False with no runner call. Likewise when
@@ -2840,10 +2823,10 @@ def _probe_qm_up(deps: Deps, stack: Stack, domains: dict[str, str]) -> bool:
     # target keeps today's semantics byte-for-byte.
     if _probe_skipped_down(deps, "qm-status", domains, group_hosts(stack.cluster_group)[:1]):
         return False
-    [(kind, value)] = impl.items()
-    # pcs/cmd are the only status shapes in the registry; both run a shell command
-    # on the cluster's first node. value is a literal or a {qm}-templated cmd.
-    shell_cmd = f"pcs {value}" if kind == "pcs" else str(value).format(qm=stack.qm.name)
+    [(_kind, value)] = impl.items()
+    # cmd is the only status shape in the registry: a {qm}-templated shell command run
+    # on the cluster's first node.
+    shell_cmd = str(value).format(qm=stack.qm.name)
     group = stack.cluster_group
     cmd = Command(
         ["ansible", f"{group}[0]", "-b", "-m", "shell", "-a", shell_cmd],  # noqa: S607
@@ -3086,7 +3069,7 @@ def _bootstrap_run(
         perf.record.note(env.describe())
         # Refresh the ansible inventory before probing/provisioning (#377): the
         # provision/observe playbooks target the #350 stack-aggregate groups
-        # (e.g. hosts: pcmk_ubuntu), and _probe_all + provision run ansible against
+        # (e.g. hosts: nativeha_ubuntu), and _probe_all + provision run ansible against
         # build/work/inventory.ini. A stale file (pre-cutover, missing the aggregate
         # groups) silently no-ops those plays (acl install, cold-boot guard). Always
         # render fresh here in the sequencer — phases.py stays pure.
@@ -3118,7 +3101,7 @@ def _bootstrap_run(
                 )
                 raise typer.Exit(code=exc.exit_code) from exc
         # Inject the stack's secrets as env vars for the provision playbook (#373):
-        # its roles read e.g. PCMK_HACLUSTER_PASSWORD via lookup('env', ...). The I/O
+        # its roles read e.g. MQWEB_AES_PASSPHRASE via lookup('env', ...). The I/O
         # (lab-secret.sh) lives here in the sequencer, not in pure phases.py — mirrors
         # os.environ.update(_vagrant_env()). The #350 cutover dropped this with the old
         # `vm provision`; without it the hacluster password is empty and chpasswd fails.
@@ -3199,7 +3182,7 @@ _OnlyOpt = Annotated[
 
 @app.command("bootstrap")
 def bootstrap(  # pragma: no cover - thin delegator; logic covered via _bootstrap_run
-    stack_name: Annotated[str, typer.Argument(help="stack to bring up (e.g. pcmk-ubuntu)")],
+    stack_name: Annotated[str, typer.Argument(help="stack to bring up (e.g. nativeha-ubuntu)")],
     from_phase: _FromOpt = None,
     only: _OnlyOpt = None,
     step: _StepFlag = False,
@@ -3429,7 +3412,7 @@ def _status_run(stack_name: str | None) -> None:
 def status(  # pragma: no cover - thin delegator; logic covered via _status_run
     stack_name: Annotated[
         str | None,
-        typer.Argument(help="stack to show (e.g. pcmk-ubuntu); omit to show all stacks"),
+        typer.Argument(help="stack to show (e.g. nativeha-ubuntu); omit to show all stacks"),
     ] = None,
 ) -> None:
     """Show phase completion (net/vms/provision/observe) for a stack or all stacks."""

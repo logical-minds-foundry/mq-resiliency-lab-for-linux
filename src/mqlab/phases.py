@@ -185,7 +185,7 @@ def _boot_order(stack: Stack, *, no_dr: bool = False) -> list[str]:
     bring-up, before the dependents that reach it in the provision phase (site-dns.yml
     `wait_for_connection`) — closing the boot-layer half of the `no route to host`
     race (spec §4.4). It is a STABLE partition: the infra hosts keep their relative
-    order and every other guest keeps the authoritative HADR order (SANs first, site-A
+    order and every other guest keeps the authoritative HADR order (site-A
     before site-B), so nothing else is reshuffled. A topology with no infra group (the
     hoist set is empty) returns `all_vms` unchanged.
 
@@ -312,7 +312,7 @@ def _batch_guests(guests: list[str], size: int) -> list[list[str]]:
     """Split an ordered guest list into contiguous batches of at most `size`.
 
     Batches are contiguous slices in the original order — never reordered — so the
-    HADR bring-up order (SANs first, site-A before site-B) is preserved across the
+    HADR bring-up order (site-A before site-B) is preserved across the
     per-batch `vagrant up` calls. Emits ceil(len/size) batches: a list shorter than one
     batch yields a single batch, size==1 yields one guest per batch (fully serial), and
     size>=len yields a single batch (the old all-at-once behaviour).

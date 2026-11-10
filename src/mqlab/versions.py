@@ -33,12 +33,12 @@ if TYPE_CHECKING:
 FAMILIES = {"ubuntu": "Ubuntu", "rhel": "RHEL"}
 # Shared (commons) roles never take a stack's OS. They split by whether the box runs MQ
 # (spec §2, correction .github#285):
-# - INFRA_ROLES run no MQ (the infra/obs commons and the SAN targets' baked `san` box,
-#   spec §4.7.1). They boot ``catalog.infra``, which is NOT support-gated.
+# - INFRA_ROLES run no MQ (the infra/obs commons). They boot ``catalog.infra``, which
+#   is NOT support-gated.
 # - INFRA_MQ_ROLES run MQ (svc-sim, app-client, mon-probe). They boot
 #   ``catalog.infra_mq``, which is support-gated like a stack default (an IBM-unsupported
 #   OS only with a recorded ``lab_default_decision``, #1285).
-INFRA_ROLES = ("infra", "obs", "san")
+INFRA_ROLES = ("infra", "obs")
 INFRA_MQ_ROLES = ("mq-client",)
 SHARED_ROLES = INFRA_ROLES + INFRA_MQ_ROLES
 # Host requirements the resolver knows how to gate (os.<family>.<major>.requires). An
@@ -440,7 +440,7 @@ def stack_ref(stack: str, catalog: Catalog) -> OsRef:
 def node_boxes(topo: dict[str, Any], catalog: Catalog) -> dict[str, BoxEntry]:
     """node -> BoxEntry for every topology node (the render covers all stacks at once).
 
-    - Shared-role nodes (the commons nodes and the SAN targets) get their role on its
+    - Shared-role nodes (the commons nodes) get their role on its
       shared OS (Catalog.shared_os: ``infra_mq`` for mq-client, else ``infra``). No
       record is consulted, so this works with no stack running.
     - Every other node gets its role on its owning stack's OS: the stack's instance

@@ -25,7 +25,7 @@ This is its HTTP analogue:
    ``running`` (after a failover or a DR cutover). ``mqlab console open`` re-runs it
    when the user re-runs the verb.
 
-VIP stacks (RDQM, Pacemaker) and svc-sim go through the same probe with a one-entry
+VIP stacks (RDQM) and svc-sim go through the same probe with a one-entry
 candidate list, so an unreachable VIP fails just as loudly.
 """
 

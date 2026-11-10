@@ -34,40 +34,39 @@ from mqlab.versions import VersionError, load_catalog, node_boxes
 # in all_vms so the vms phase brings them up alongside the obs pair.
 TOPO = (
     "nodes:\n"
-    "  san-a: { box: san }\n"
-    "  pcmk-a1: { box: pcmk }\n"
-    "  pcmk-a2: { box: pcmk }\n"
-    "  pcmk-a3: { box: pcmk }\n"
-    "  pcmk-b1: { box: pcmk }\n"
+    "  nha-ubuntu-a1: { box: mq-nativeha }\n"
+    "  nha-ubuntu-a2: { box: mq-nativeha }\n"
+    "  nha-ubuntu-a3: { box: mq-nativeha }\n"
+    "  nha-ubuntu-b1: { box: mq-nativeha }\n"
+    "  nha-ubuntu-b2: { box: mq-nativeha }\n"
     "  obs: { box: obs }\n"
     "  mon-probe: { box: mq-client }\n"
     "  svc-sim: { box: mq-client }\n"
     "  app-client: { box: mq-client }\n"
     "groups:\n"
-    "  san_a:   [san-a]\n"
-    "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
-    "  pcmk_b:  [pcmk-b1]\n"
+    "  nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2, nha-ubuntu-a3]\n"
+    "  nha_ubuntu_b: [nha-ubuntu-b1, nha-ubuntu-b2]\n"
     "  obs_box: [obs]\n"
     "  probe:   [mon-probe]\n"
     "  svc:     [svc-sim]\n"
     "  app:     [app-client]\n"
     "stacks:\n"
-    "  pcmk-ubuntu:\n"
-    "    mechanism: pacemaker-san\n"
+    "  nativeha-ubuntu:\n"
+    "    mechanism: native-ha\n"
     "    os_family: ubuntu\n"
-    "    short: PCMK\n"
-    "    groups: [san_a, pcmk_a, pcmk_b]\n"
-    "    dr_groups: [pcmk_b]\n"
-    "    provision: ansible/site-pcmk.yml\n"
-    "    secrets: [pcmk_hacluster_password, mqweb_admin_password]\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
+    "    short: NHAU\n"
+    "    groups: [nha_ubuntu_a, nha_ubuntu_b]\n"
+    "    dr_groups: [nha_ubuntu_b]\n"
+    "    provision: ansible/site-nativeha-ubuntu.yml\n"
+    "    secrets: [mqweb_aes_passphrase]\n"
+    "    qm: { svc_conn: 10.60.0.50 }\n"
     "    alloc:\n"
-    "      exporter_app_port: 9157\n"
+    "      exporter_app_port: 9163\n"
     "      exporter_svc_port: 9158\n"
-    "      app_unit: app-pcmk\n"
+    "      app_unit: app-nhau\n"
     "      svc_port: 1414\n"
     "    verbs:\n"
-    "      qm-status:  { pcs: 'status resources' }\n"
+    "      qm-status:  { cmd: 'dspmq -m {qm} -o nativeha -x' }\n"
     "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
     "commons:\n"
     "  groups: [obs_box, probe, svc, app]\n"
@@ -98,11 +97,11 @@ def _fake_states(net=True, vms=True, provision=False, observe=False):
     """
     nets = {"net-mgmt": "active", "net-data-a": "active"} if net else {}
     guests = [
-        "san-a",
-        "pcmk-a1",
-        "pcmk-a2",
-        "pcmk-a3",
-        "pcmk-b1",
+        "nha-ubuntu-a1",
+        "nha-ubuntu-a2",
+        "nha-ubuntu-a3",
+        "nha-ubuntu-b1",
+        "nha-ubuntu-b2",
         "obs",
         "mon-probe",
         "svc-sim",
@@ -119,7 +118,7 @@ def test_phase_order():
 def test_first_unsatisfied_resumes_from_gap(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     states = _fake_states(net=True, vms=True, provision=False, observe=False)
     assert first_unsatisfied(stack, states) == 2  # provision
 
@@ -127,28 +126,28 @@ def test_first_unsatisfied_resumes_from_gap(monkeypatch, tmp_path):
 def test_all_satisfied_returns_none(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     assert first_unsatisfied(stack, _fake_states(True, True, True, True)) is None
 
 
 def test_first_unsatisfied_net_gap(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     assert first_unsatisfied(stack, _fake_states(net=False)) == 0
 
 
 def test_first_unsatisfied_vms_gap(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     assert first_unsatisfied(stack, _fake_states(net=True, vms=False)) == 1
 
 
 def test_first_unsatisfied_observe_gap(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     states = _fake_states(net=True, vms=True, provision=True, observe=False)
     assert first_unsatisfied(stack, states) == 3
 
@@ -177,7 +176,7 @@ def test_obs_is_in_all_vms_via_commons(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     assert "obs" in _commons_members()
-    assert "obs" in all_vms(lab_stacks()["pcmk-ubuntu"])
+    assert "obs" in all_vms(lab_stacks()["nativeha-ubuntu"])
 
 
 # --- satisfied predicate edge branches ---
@@ -186,7 +185,7 @@ def test_obs_is_in_all_vms_via_commons(monkeypatch, tmp_path):
 def test_net_unsatisfied_when_one_net_inactive(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     states = _fake_states()
     states["nets"]["net-data-a"] = "inactive"
     net_phase = PHASES[0]
@@ -196,7 +195,7 @@ def test_net_unsatisfied_when_one_net_inactive(monkeypatch, tmp_path):
 def test_vms_unsatisfied_when_commons_down(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     states = _fake_states()
     del states["domains"]["lab_obs"]  # commons VM not running
     vms_phase = PHASES[1]
@@ -206,11 +205,11 @@ def test_vms_unsatisfied_when_commons_down(monkeypatch, tmp_path):
 def test_vms_satisfied_when_all_running(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     assert PHASES[1].satisfied(stack, _fake_states()) is True
 
 
-# --- build_steps: argv/label assertions for pcmk-ubuntu ---
+# --- build_steps: argv/label assertions for nativeha-ubuntu ---
 
 
 def test_net_build_steps_delegates_to_idempotent_net_up(monkeypatch, tmp_path):
@@ -222,7 +221,7 @@ def test_net_build_steps_delegates_to_idempotent_net_up(monkeypatch, tmp_path):
     # pre-existing net. phases.py is pure, so we assert the delegation structurally.
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[0].build_steps(stack, None)
     assert all(isinstance(s, CommandStep) for s in steps)
     # one step that runs the idempotent script over every lab net (sorted names)
@@ -236,15 +235,15 @@ def test_net_build_steps_delegates_to_idempotent_net_up(monkeypatch, tmp_path):
     assert "net-define" not in argv
 
 
-# The seeded topology's ordered VM list for pcmk-ubuntu: stack members (groups
-# [san_a, pcmk_a, pcmk_b]) then commons (obs_box/probe/svc/app), deduped — the exact
+# The seeded topology's ordered VM list for nativeha-ubuntu: stack members (groups
+# [nha_ubuntu_a, nha_ubuntu_b]) then commons (obs_box/probe/svc/app), deduped — the exact
 # HADR bring-up order the vms phase must batch WITHOUT reordering.
 _EXPECTED_VMS = [
-    "san-a",
-    "pcmk-a1",
-    "pcmk-a2",
-    "pcmk-a3",
-    "pcmk-b1",
+    "nha-ubuntu-a1",
+    "nha-ubuntu-a2",
+    "nha-ubuntu-a3",
+    "nha-ubuntu-b1",
+    "nha-ubuntu-b2",
     "obs",
     "mon-probe",
     "svc-sim",
@@ -288,12 +287,12 @@ def _batched_targets(steps) -> list[str]:
 def test_vms_build_steps_vagrant_up_members_and_commons(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
     # Batches concatenate back to the full ordered VM set (members + commons), deduped.
     targets = _batched_targets(steps)
-    assert "pcmk-a1" in targets
-    assert "pcmk-b1" in targets
+    assert "nha-ubuntu-a1" in targets
+    assert "nha-ubuntu-b1" in targets
     assert "obs" in targets
     assert "mon-probe" in targets
     # svc-sim and app-client are shared commons (spec §6); all_vms must include them
@@ -306,7 +305,7 @@ def test_vms_build_steps_batches_default_n_preserving_order(monkeypatch, tmp_pat
     each a contiguous slice — no reordering (#638)."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)  # no boot_batch → default 4
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
     # 9 VMs, N=4 → ceil(9/4) = 3 batches, contiguous chunks in order.
     assert [_batch_payload(s) for s in steps] == [
@@ -316,15 +315,15 @@ def test_vms_build_steps_batches_default_n_preserving_order(monkeypatch, tmp_pat
     ]
     # Concatenation preserves the authoritative HADR order exactly.
     assert _batched_targets(steps) == _EXPECTED_VMS
-    # Each multi-guest batch repeats a box (the pcmk nodes share the pcmk box; the
+    # Each multi-guest batch repeats a box (the nha nodes share the mq-nativeha box; the
     # mq-client commons share theirs), so both serialize (#859); the lone trailing guest
     # has no in-batch contention, so it keeps the parallel default.
     assert [_is_serial(s) for s in steps] == [True, True, False]
     # Multi-batch runs carry a [i/n] progress label for a readable transcript.
     assert [s.label for s in steps] == [
-        "pcmk-ubuntu vms up [1/3]",
-        "pcmk-ubuntu vms up [2/3]",
-        "pcmk-ubuntu vms up [3/3]",
+        "nativeha-ubuntu vms up [1/3]",
+        "nativeha-ubuntu vms up [2/3]",
+        "nativeha-ubuntu vms up [3/3]",
     ]
 
 
@@ -332,7 +331,7 @@ def test_vms_build_steps_custom_boot_batch(monkeypatch, tmp_path):
     """A topology `boot_batch: 2` yields ceil(9/2) = 5 ordered contiguous batches."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_boot_batch(tmp_path, 2)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
     assert len(steps) == 5
     assert [_batch_payload(s) for s in steps] == [
@@ -349,7 +348,7 @@ def test_vms_build_steps_serial_when_batch_one(monkeypatch, tmp_path):
     """boot_batch: 1 is fully serial — one guest per `vagrant up`, order preserved."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_boot_batch(tmp_path, 1)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
     assert len(steps) == len(_EXPECTED_VMS)
     # One guest per batch → no in-batch contention → no serialization flag (#859).
@@ -363,10 +362,10 @@ def test_vms_build_steps_single_batch_when_n_ge_len(monkeypatch, tmp_path):
     labelled without the [i/n] progress suffix."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_boot_batch(tmp_path, 99)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
     assert len(steps) == 1
-    assert steps[0].label == "pcmk-ubuntu vms up"
+    assert steps[0].label == "nativeha-ubuntu vms up"
     assert _batch_payload(steps[0]) == _EXPECTED_VMS
 
 
@@ -405,7 +404,7 @@ def test_batch_guests_contiguous_chunks(items, size, expected):
 # --- #859: same-box boot serialization ------------------------------------- #
 
 # A topology slice exercising the box-contention key: two stack nodes on one role (one
-# box), a shared-node role on a distinct box, and the SAN targets (both on the san box).
+# box), a shared-node role on a distinct box, and the two DNS nodes (both on the infra box).
 # No file I/O — the helpers take the version layer's per-node selection directly.
 _BOX_TOPO = {
     "groups": {"nha_rhel_crr_a": ["nha-rhel-crr-a1", "nha-rhel-crr-a2"]},
@@ -414,8 +413,8 @@ _BOX_TOPO = {
         "nha-rhel-crr-a1": {"box": "mq-nativeha"},
         "nha-rhel-crr-a2": {"box": "mq-nativeha"},
         "svc-sim": {"box": "mq-client"},
-        "san-a": {"box": "san"},  # the baked SAN box
-        "san-b": {"box": "san"},  # the baked SAN box
+        "infra-client": {"box": "infra"},  # the shared infra box
+        "infra-svc": {"box": "infra"},  # the shared infra box
     },
 }
 _BOXES = node_boxes(_BOX_TOPO, load_catalog())
@@ -431,11 +430,11 @@ def test_guest_box_resolves_role_to_generated_box():
     assert _guest_box("svc-sim", _BOXES) == cat.box("mq-client", cat.infra_mq).name
 
 
-def test_guest_box_san_targets_share_the_san_box():
-    """Both SAN targets clone the one baked san box on the infra OS, so they contend."""
+def test_guest_box_infra_nodes_share_the_infra_box():
+    """Both DNS nodes clone the one infra box on the infra OS, so they contend."""
     cat = load_catalog()
-    assert _guest_box("san-a", _BOXES) == _guest_box("san-b", _BOXES)
-    assert _guest_box("san-a", _BOXES) == cat.box("san", cat.infra).name
+    assert _guest_box("infra-client", _BOXES) == _guest_box("infra-svc", _BOXES)
+    assert _guest_box("infra-client", _BOXES) == cat.box("infra", cat.infra).name
 
 
 def test_guest_box_refuses_a_guest_that_is_not_a_node():
@@ -449,9 +448,9 @@ def test_vms_steps_fail_loud_on_an_unknown_box_role(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        TOPO.replace("  pcmk-b1: { box: pcmk }\n", "  pcmk-b1: { box: ghost }\n")
+        TOPO.replace("  nha-ubuntu-b1: { box: mq-nativeha }\n", "  nha-ubuntu-b1: { box: ghost }\n")
     )
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     with pytest.raises(VersionError, match="box role 'ghost'"):
         PHASES[1].build_steps(stack, None)
 
@@ -461,8 +460,8 @@ def test_vms_steps_fail_loud_on_an_unknown_box_role(monkeypatch, tmp_path):
     [
         (["nha-rhel-crr-a1", "nha-rhel-crr-a2"], True),  # same fat box → contends
         (["nha-rhel-crr-a1", "svc-sim"], False),  # distinct boxes → no contention
-        (["san-a", "san-b"], True),  # both on the san box → contends
-        (["nha-rhel-crr-a1", "svc-sim", "san-a"], False),  # all distinct
+        (["infra-client", "infra-svc"], True),  # both on the infra box → contends
+        (["nha-rhel-crr-a1", "svc-sim", "infra-client"], False),  # all distinct
         (["nha-rhel-crr-a1", "svc-sim", "nha-rhel-crr-a2"], True),  # one repeat is enough
         (["nha-rhel-crr-a1"], False),  # a lone guest never contends with itself
         ([], False),  # empty batch → nothing to serialize
@@ -476,7 +475,7 @@ def test_batch_shares_box(batch, expected):
 def test_provision_build_steps_playbook_and_qm_vars(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[2].build_steps(stack, None)
     # DNS comes up first (#478): render the zones, then serve + point resolvers
     assert steps[0].command.argv == ["mqlab", "dns", "render"]
@@ -487,13 +486,13 @@ def test_provision_build_steps_playbook_and_qm_vars(monkeypatch, tmp_path):
     # then the stack's own provision playbook
     argv = steps[2].command.argv
     assert argv[0] == "ansible-playbook"
-    assert "site-pcmk.yml" in argv  # the stack's provision playbook (basename)
+    assert "site-nativeha-ubuntu.yml" in argv  # the stack's provision playbook (basename)
     # #351 QM extra-vars sourced from stack.qm (names DERIVE from short)
-    assert "qm_app=PCMKAPP" in argv
+    assert "qm_app=NHAUAPP" in argv
     assert "qm_svc=SVCQM" in argv  # single shared counterparty (#446)
-    assert "chl_to_svc=PCMKAPP.SVCQM" in argv
-    assert "chl_to_app=SVCQM.PCMKAPP" in argv
-    assert "svc_req_queue=PCMK.SVC.REQUEST" in argv  # this stack's own queue on SVCQM
+    assert "chl_to_svc=NHAUAPP.SVCQM" in argv
+    assert "chl_to_app=SVCQM.NHAUAPP" in argv
+    assert "svc_req_queue=NHAU.SVC.REQUEST" in argv  # this stack's own queue on SVCQM
 
 
 def test_provision_build_steps_raises_when_no_playbook(monkeypatch, tmp_path):
@@ -549,7 +548,7 @@ RHEL_TOPO = (
     "    groups: [rdqm_a]\n"
     "    provision: ansible/site-rdqm.yml\n"
     "    secrets: [mqweb_admin_password]\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
+    "    qm: { vip: 10.10.1.200, svc_conn: 10.60.0.50 }\n"
     "    alloc:\n"
     "      exporter_app_port: 9157\n"
     "      exporter_svc_port: 9158\n"
@@ -646,14 +645,14 @@ def test_provision_configures_then_assures_before_dns(monkeypatch, tmp_path):
 def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[3].build_steps(stack, None)
     labels = [s.label for s in steps]
     assert any("targets" in lab_ for lab_ in labels)
     # the exporter deployment list is scoped to THIS stack (#503), so observing one stack
     # never deploys another stack's (crash-looping) exporter unit
     assert any(
-        s.command.argv == ["mqlab", "obs", "targets", "--stack", "pcmk-ubuntu"] for s in steps
+        s.command.argv == ["mqlab", "obs", "targets", "--stack", "nativeha-ubuntu"] for s in steps
     )
     # net-reach peers are rendered before observability.yml consumes them (#381)
     assert any(s.command.argv == ["mqlab", "obs", "reach-peers"] for s in steps)
@@ -676,7 +675,7 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     # host-side/net-agnostic and runs connection=local instead.
     for argv in playbooks:
         if argv[1] in ("site-obs.yml", "observability.yml"):
-            assert "qm_app=PCMKAPP" in argv
+            assert "qm_app=NHAUAPP" in argv
     # site-obs.yml loops the mq-exporter role over the `mq_exporters` extra-var; it
     # is a JSON list, so it is passed as a file (`-e @<mq_exporters_path>`). #423 wired
     # this only into the `obs up` call site — the observe phase must carry it too or
@@ -693,7 +692,7 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     # observability.yml is `hosts: all`, so it must be --limited to THIS stack's
     # nodes (cluster + commons) — a cluster node + a commons node both appear.
     limit = obs_argv[obs_argv.index("--limit") + 1]
-    assert "pcmk-a1" in limit and "svc-sim" in limit
+    assert "nha-ubuntu-a1" in limit and "svc-sim" in limit
     # site-obs bounces grafana -> heal the relay + fail-loud verify the workstation
     # forward (#264/#383) as the LAST step. The relay unit/port is profile-specific, so
     # it is discovered at run time by `mqlab obs relay-heal`, never a hardcoded
@@ -717,7 +716,7 @@ def test_all_vms_includes_svc_and_app(monkeypatch, tmp_path):
     _seed(tmp_path)
     from mqlab.phases import all_vms
 
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     vms = all_vms(stack)
     assert "svc-sim" in vms, "svc-sim must be in all_vms (shared commons svc group)"
     assert "app-client" in vms, "app-client must be in all_vms (shared commons app group)"
@@ -776,25 +775,26 @@ def test_build_states_helper_shape():
 
 
 # --------------------------------------------------------------------------- #
-# --no-dr phase shaping (#188). The seeded pcmk-ubuntu declares dr_groups: [pcmk_b],
-# so pcmk-b1 is the DR (site-B) guest the effective-member phases must drop.
+# --no-dr phase shaping (#188). The seeded nativeha-ubuntu declares dr_groups:
+# [nha_ubuntu_b], so nha-ubuntu-b1 is a DR (site-B) guest the effective-member phases
+# must drop.
 # --------------------------------------------------------------------------- #
 def test_vms_no_dr_brings_up_site_a_only(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     targets = _batched_targets(PHASES[1].build_steps(stack, None, no_dr=True))
-    assert "pcmk-a1" in targets  # site-A HA guests still come up
-    assert "pcmk-b1" not in targets  # the DR guest is skipped
+    assert "nha-ubuntu-a1" in targets  # site-A HA guests still come up
+    assert "nha-ubuntu-b1" not in targets  # the DR guest is skipped
     assert "obs" in targets and "svc-sim" in targets  # commons are always included
 
 
 def test_vms_full_brings_up_both_sites(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     targets = _batched_targets(PHASES[1].build_steps(stack, None, no_dr=False))
-    assert "pcmk-b1" in targets  # default keeps the full HADR set
+    assert "nha-ubuntu-b1" in targets  # default keeps the full HADR set
 
 
 def _provision_step(steps):
@@ -804,7 +804,7 @@ def _provision_step(steps):
 def test_provision_no_dr_emits_dr_enabled_false(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[2].build_steps(stack, None, no_dr=True)
     argv = _provision_step(steps).command.argv
     assert "-e" in argv
@@ -812,13 +812,13 @@ def test_provision_no_dr_emits_dr_enabled_false(monkeypatch, tmp_path):
     # the site-dns --limit must also drop the absent DR guest (else UNREACHABLE)
     dns_argv = next(s for s in steps if "site-dns.yml" in s.command.argv).command.argv
     limit = dns_argv[dns_argv.index("--limit") + 1]
-    assert "pcmk-a1" in limit and "pcmk-b1" not in limit
+    assert "nha-ubuntu-a1" in limit and "nha-ubuntu-b1" not in limit
 
 
 def test_provision_full_omits_dr_enabled(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[2].build_steps(stack, None, no_dr=False)
     assert not any("dr_enabled" in a for a in _provision_step(steps).command.argv)
 
@@ -826,12 +826,12 @@ def test_provision_full_omits_dr_enabled(monkeypatch, tmp_path):
 def test_observe_no_dr_limits_to_site_a(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[3].build_steps(stack, None, no_dr=True)
     obs_argv = next(s.command.argv for s in steps if "observability.yml" in s.command.argv)
     limit = obs_argv[obs_argv.index("--limit") + 1]
-    assert "pcmk-a1" in limit
-    assert "pcmk-b1" not in limit
+    assert "nha-ubuntu-a1" in limit
+    assert "nha-ubuntu-b1" not in limit
 
 
 # --------------------------------------------------------------------------- #
@@ -841,8 +841,8 @@ def test_observe_no_dr_limits_to_site_a(monkeypatch, tmp_path):
 # all_vms appends infra at the TAIL — the pre-#1164 order _boot_order corrects.
 TOPO_INFRA = (
     "nodes:\n"
-    "  san-a: { box: san }\n"
-    "  pcmk-a1: { box: pcmk }\n"
+    "  nha-ubuntu-a1: { box: mq-nativeha }\n"
+    "  nha-ubuntu-a2: { box: mq-nativeha }\n"
     "  obs: { box: obs }\n"
     "  mon-probe: { box: mq-client }\n"
     "  svc-sim: { box: mq-client }\n"
@@ -850,20 +850,19 @@ TOPO_INFRA = (
     "  infra-client: { box: infra }\n"
     "  infra-svc: { box: infra }\n"
     "groups:\n"
-    "  san_a:   [san-a]\n"
-    "  pcmk_a:  [pcmk-a1]\n"
+    "  nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2]\n"
     "  obs_box: [obs]\n"
     "  probe:   [mon-probe]\n"
     "  svc:     [svc-sim]\n"
     "  app:     [app-client]\n"
     "  infra:   [infra-client, infra-svc]\n"
     "stacks:\n"
-    "  pcmk-ubuntu:\n"
-    "    mechanism: pacemaker-san\n"
+    "  nativeha-ubuntu:\n"
+    "    mechanism: native-ha\n"
     "    os_family: ubuntu\n"
-    "    short: PCMK\n"
-    "    groups: [san_a, pcmk_a]\n"
-    "    provision: ansible/site-pcmk.yml\n"
+    "    short: NHAU\n"
+    "    groups: [nha_ubuntu_a]\n"
+    "    provision: ansible/site-nativeha-ubuntu.yml\n"
     "    secrets: []\n"
     "    qm: {}\n"
     "    alloc: {}\n"
@@ -891,12 +890,12 @@ def test_boot_order_hoists_infra_to_front(monkeypatch, tmp_path):
     _seed_infra(tmp_path)
     from mqlab.phases import _boot_order, _non_mq_commons_hosts, all_vms
 
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     order = _boot_order(stack)
     # all_vms appends infra at the tail; _boot_order hoists it to the front.
     assert set(_non_mq_commons_hosts()) == {"infra-client", "infra-svc"}
     assert order[:2] == ["infra-client", "infra-svc"]
-    assert order.index("infra-client") < order.index("san-a")
+    assert order.index("infra-client") < order.index("nha-ubuntu-a1")
     assert order.index("infra-client") < order.index("app-client")
     # Same VM set, just reordered — nothing dropped or duplicated.
     assert sorted(order) == sorted(all_vms(stack))
@@ -911,7 +910,7 @@ def test_boot_order_unchanged_without_infra_group(monkeypatch, tmp_path):
     _seed(tmp_path)  # base fixture: no infra group
     from mqlab.phases import _boot_order, all_vms
 
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     assert _boot_order(stack) == all_vms(stack)
 
 
@@ -919,10 +918,10 @@ def test_vms_build_steps_boot_infra_first(monkeypatch, tmp_path):
     """The built vagrant-up batches boot the infra nodes before their dependents."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_infra(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     targets = _batched_targets(PHASES[1].build_steps(stack, None))
     assert targets[:2] == ["infra-client", "infra-svc"]
-    assert targets.index("infra-client") < targets.index("san-a")
+    assert targets.index("infra-client") < targets.index("nha-ubuntu-a1")
 
 
 def test_vms_build_steps_attach_bounded_boot_retry(monkeypatch, tmp_path):
@@ -932,7 +931,7 @@ def test_vms_build_steps_attach_bounded_boot_retry(monkeypatch, tmp_path):
     _seed(tmp_path)
     from mqlab.phases import _BOOT_RETRY
 
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
     assert steps  # sanity: batches were emitted
     assert all(s.retry is _BOOT_RETRY for s in steps)
@@ -948,7 +947,7 @@ def test_every_phase_tags_its_steps_with_its_own_name(monkeypatch, tmp_path):
     emits, so the perf report groups timings by phase (net/vms/provision/observe)."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    stack = lab_stacks()["pcmk-ubuntu"]
+    stack = lab_stacks()["nativeha-ubuntu"]
     for phase in PHASES:
         steps = phase.build_steps(stack, None)
         assert steps, phase.name

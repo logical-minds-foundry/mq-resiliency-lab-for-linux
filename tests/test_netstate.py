@@ -16,14 +16,14 @@ def test_emits_tri_state_per_named_network():
 def test_net_peers_lists_same_network_peers_with_their_ips():
     topo = {
         "nodes": {
-            "pcmk-a1": {"nics": {"net-hb-a": "172.16.1.51", "net-mgmt": "10.50.0.51"}},
-            "pcmk-a2": {"nics": {"net-hb-a": "172.16.1.52", "net-mgmt": "10.50.0.52"}},
-            "san-a": {"nics": {"net-san-a": "10.40.1.5"}},
+            "rdqm-a1": {"nics": {"net-hb-a": "172.16.1.31", "net-mgmt": "10.50.0.31"}},
+            "rdqm-a2": {"nics": {"net-hb-a": "172.16.1.32", "net-mgmt": "10.50.0.32"}},
+            "rdqm-b1": {"nics": {"net-hb-b": "172.16.2.41"}},
         }
     }
     peers = net_peers(topo)
-    assert peers["pcmk-a1"]["net-hb-a"] == [{"peer": "pcmk-a2", "ip": "172.16.1.52"}]
+    assert peers["rdqm-a1"]["net-hb-a"] == [{"peer": "rdqm-a2", "ip": "172.16.1.32"}]
     # net-mgmt is excluded (the scrape plane, not a tested data path)
-    assert "net-mgmt" not in peers["pcmk-a1"]
+    assert "net-mgmt" not in peers["rdqm-a1"]
     # a node alone on a net has no peers entry for it
-    assert peers.get("san-a", {}) == {}
+    assert peers.get("rdqm-b1", {}) == {}

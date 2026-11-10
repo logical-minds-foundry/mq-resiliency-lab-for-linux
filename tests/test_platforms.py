@@ -16,7 +16,7 @@ X86_NOKVM = HostFacts(arch=X86_64, kvm=False, distro_family="dnf", in_vergil=Fal
 
 TOPO = {
     "defaults": {"cpus": 1, "memory": 1024},
-    "groups": {"rdqm_a": ["rdqm-a1"], "san_a": ["san-a"]},
+    "groups": {"rdqm_a": ["rdqm-a1"]},
     "stacks": {"rdqm-rhel": {"os_family": "rhel", "groups": ["rdqm_a"]}},
     "nodes": {
         "obs": {"box": "obs", "cpus": 2, "memory": 4096, "nics": {"net-mgmt": "10.50.0.2"}},
@@ -25,7 +25,6 @@ TOPO = {
             "extra_disk": 10,
             "nics": {"net-mgmt": "10.50.0.31"},
         },
-        "san-a": {"box": "san", "nics": {"net-mgmt": "10.50.0.5"}},
     },
 }
 BOXES = node_boxes(TOPO, load_catalog())
@@ -59,15 +58,6 @@ def test_resolve_x86_host_everything_native_kvm():
     for n in res.values():
         assert n.arch == X86_64 and n.driver == "kvm" and n.cpu_mode == "host-passthrough"
         assert n.boot_timeout is None
-
-
-def test_resolve_san_targets_boot_the_baked_san_box():
-    """The SAN targets boot the locally-baked san box on the infra OS (#1278), not the
-    bare upstream base box, so no node carries a Vagrant box_version pin any more."""
-    res = p.resolve(TOPO, X86_KVM, BOXES)
-    assert res["san-a"].box == f"san-{CATALOG.infra.token}"
-    assert res["san-a"].dvd is None
-    assert all(not hasattr(n, "box_version") for n in res.values())
 
 
 def test_resolve_x86_nokvm_is_display_safe_not_raising():

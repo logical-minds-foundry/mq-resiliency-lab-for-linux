@@ -12,8 +12,8 @@ from tests.fakes import RecordingRunner, ScriptedResult
 SAMPLE = """\
  Id   Name             State
 ---------------------------------
- -    lab_pcmk-a1      shut off
- 49   lab_pcmk-b1      running
+ -    lab_nha-ubuntu-a1 shut off
+ 49   lab_nha-ubuntu-b1 running
 """
 
 
@@ -22,10 +22,13 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  rdqm-a1: { box: mq-rdqm }\n  pcmk-a1: { box: pcmk }\n  pcmk-b1: { box: pcmk }\n"
-        "groups:\n  rdqm_a: [rdqm-a1]\n  pcmk_a: [pcmk-a1]\n  pcmk_b: [pcmk-b1]\n"
+        "  rdqm-a1: { box: mq-rdqm }\n"
+        "  nha-ubuntu-a1: { box: mq-nativeha }\n"
+        "  nha-ubuntu-b1: { box: mq-nativeha }\n"
+        "groups:\n  rdqm_a: [rdqm-a1]\n"
+        "  nha_ubuntu_a: [nha-ubuntu-a1]\n  nha_ubuntu_b: [nha-ubuntu-b1]\n"
         "stacks:\n  rdqm-rhel:\n    os_family: rhel\n    groups: [rdqm_a]\n"
-        "  pcmk-ubuntu:\n    os_family: ubuntu\n    groups: [pcmk_a, pcmk_b]\n"
+        "  nativeha-ubuntu:\n    os_family: ubuntu\n    groups: [nha_ubuntu_a, nha_ubuntu_b]\n"
     )
     buffer = io.StringIO()
     renderer = Renderer(Console(file=buffer, force_terminal=False, width=120))
@@ -36,30 +39,32 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     assert code == 0
     out = buffer.getvalue()
     assert "$ virsh -c qemu:///system list --all" in out  # command echoed (transparency)
-    assert "lab_pcmk-a1" in out  # raw virsh output streamed to screen — the State source (#88)
+    # raw virsh output streamed to screen — the State source (#88)
+    assert "lab_nha-ubuntu-a1" in out
     assert "topology.yaml" in out  # the other source named on the table (#88)
     assert "rdqm-a1" in out  # full fleet — incl the defined-but-not-instantiated RHEL node
     assert "not created" in out
     assert "mq-rdqm-rhel10" in out  # the Box column: the generated box name
     assert "rdqm-rhel" in out  # config-driven Stack(s) column, from topology.yaml stacks (#90)
     body = transcript.path.read_text(encoding="utf-8")
-    assert "lab_pcmk-b1      running" in body  # raw rows teed to the transcript
+    assert "lab_nha-ubuntu-b1 running" in body  # raw rows teed to the transcript
 
 
 def test_vm_status_core_filters_to_given_guests(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "nodes:\n  rdqm-a1: { box: infra }\n  pcmk-a1: { box: infra }\n  pcmk-b1: { box: infra }\n"
+        "nodes:\n  rdqm-a1: { box: infra }\n"
+        "  nha-ubuntu-a1: { box: infra }\n  nha-ubuntu-b1: { box: infra }\n"
     )
     buffer = io.StringIO()
     renderer = Renderer(Console(file=buffer, force_terminal=False, width=120))
     transcript = Transcript(transcript_path("vm-status", "20260610T000000Z"))
     runner = RecordingRunner(results=[ScriptedResult([])])  # empty virsh output
-    code = vm_status_core(runner, renderer, transcript, guests=["pcmk-a1", "pcmk-b1"])
+    code = vm_status_core(runner, renderer, transcript, guests=["nha-ubuntu-a1", "nha-ubuntu-b1"])
     transcript.close()
     assert code == 0
     out = buffer.getvalue()
-    assert "pcmk-a1" in out
-    assert "pcmk-b1" in out
+    assert "nha-ubuntu-a1" in out
+    assert "nha-ubuntu-b1" in out
     assert "rdqm-a1" not in out  # filtered out of the table

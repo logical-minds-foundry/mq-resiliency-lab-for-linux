@@ -66,15 +66,10 @@ def test_fleet_has_the_catalog_boxes():
         "obs-ubuntu26",
         "infra-ubuntu26",
         "mq-client-ubuntu26",
-        "san-ubuntu26",
         "mq-nativeha-rhel9",
         "mq-nativeha-rhel10",
         "mq-nativeha-ubuntu24",
         "mq-nativeha-ubuntu26",
-        "pcmk-ubuntu24",
-        "pcmk-ubuntu26",
-        "pdrbd-ubuntu24",
-        "pdrbd-ubuntu26",
     }
 
 
@@ -96,11 +91,8 @@ def test_fleet_derives_from_catalog():
         "mq-nativeha-ubuntu24",
         "mq-nativeha-ubuntu26",
         "mq-client-ubuntu26",
-        "san-ubuntu26",
         "infra-ubuntu26",
         "obs-ubuntu26",
-        "pcmk-ubuntu24",
-        "pcmk-ubuntu26",
         "mq-rdqm-rhel9",
         "mq-nativeha-rhel9",
         "rhel/9-x86_64",
@@ -117,22 +109,17 @@ def test_fleet_skips_rhel_on_an_arm_host():
         "obs-ubuntu26",
         "infra-ubuntu26",
         "mq-client-ubuntu26",
-        "san-ubuntu26",
         "mq-nativeha-ubuntu24",
         "mq-nativeha-ubuntu26",
-        "pcmk-ubuntu24",
-        "pcmk-ubuntu26",
-        "pdrbd-ubuntu24",
-        "pdrbd-ubuntu26",
     }
 
 
 def test_fleet_specs_carry_the_catalog_inputs():
     spec = box.FLEET["mq-client-ubuntu26"]
     assert (spec.role, spec.bake_stem, spec.mq_bearing) == ("mq-client", "mq-ubuntu", True)
-    assert box.FLEET["pcmk-ubuntu24"].mq_bearing is True  # pcmk bakes MQ (#1572)
+    assert box.FLEET["mq-nativeha-ubuntu24"].mq_bearing is True  # bakes MQ (#1572)
     assert box.FLEET["obs-ubuntu26"].mq_bearing is False  # obs carries no MQ (#1584)
-    assert box.FLEET["san-ubuntu26"].mq_bearing is False  # no MQ payload
+    assert box.FLEET["infra-ubuntu26"].mq_bearing is False  # no MQ payload
     assert box.FLEET["rhel/9-x86_64"].role is None
 
 
@@ -198,11 +185,9 @@ def test_manifest_hash_artifact_is_arch_suffixed():
 def test_topology_stack_roles_derive_from_node_box_roles():
     roles = box._topology_stack_roles(load_catalog())
     assert roles == {
-        "pcmk-ubuntu": {"pcmk"},  # the SAN targets are `box: san`, an infra role
         "rdqm-rhel": {"mq-rdqm"},
         "nativeha-rhel-crr": {"mq-nativeha"},
         "nativeha-ubuntu": {"mq-nativeha"},
-        "pcmk-drbd-ubuntu": {"pdrbd"},  # shared-nothing: no SAN role (epic .github#310)
     }
 
 
@@ -219,12 +204,16 @@ def test_topology_stack_roles_refuse_an_unknown_role(monkeypatch):
 
 def test_topology_stack_roles_drop_infra_roles(monkeypatch):
     topo = {
-        "nodes": {"x1": {"box": "obs"}, "x2": {"box": "pcmk"}, "x3": {"box": "san"}},
+        "nodes": {
+            "x1": {"box": "obs"},
+            "x2": {"box": "mq-nativeha"},
+            "x3": {"box": "infra"},
+        },
         "stacks": {"s": {"groups": ["g"]}},
         "groups": {"g": ["x1", "x2", "x3"]},
     }
     monkeypatch.setattr(box, "_load_topology", lambda: topo)
-    assert box._topology_stack_roles(load_catalog()) == {"s": {"pcmk"}}
+    assert box._topology_stack_roles(load_catalog()) == {"s": {"mq-nativeha"}}
 
 
 def test_boxes_for_build_default_covers_every_stack():
@@ -232,13 +221,10 @@ def test_boxes_for_build_default_covers_every_stack():
     assert names == [
         "infra-ubuntu26",
         "obs-ubuntu26",
-        "san-ubuntu26",
         "mq-client-ubuntu26",
-        "pcmk-ubuntu26",
         "mq-rdqm-rhel10",
         "mq-nativeha-rhel10",
         "mq-nativeha-ubuntu26",
-        "pdrbd-ubuntu26",
     ]
 
 
@@ -247,7 +233,6 @@ def test_boxes_for_build_family_selects_its_stacks():
     assert names == [
         "infra-ubuntu26",
         "obs-ubuntu26",
-        "san-ubuntu26",
         "mq-client-ubuntu26",
         "mq-rdqm-rhel9",
         "mq-nativeha-rhel9",
@@ -260,7 +245,6 @@ def test_boxes_for_build_rhel10_selects_both_rhel_stacks():
     assert names == [
         "infra-ubuntu26",
         "obs-ubuntu26",
-        "san-ubuntu26",
         "mq-client-ubuntu26",
         "mq-rdqm-rhel10",
         "mq-nativeha-rhel10",
@@ -304,38 +288,33 @@ def test_boxes_for_build_refuses_an_unsupported_major():
 
 def test_boxes_for_build_ubuntu26_builds_every_ubuntu_stack_on_26():
     """A build file naming ubuntu:26 (IBM-unsupported) bakes every Ubuntu stack on 26,
-    beside the shared boxes (mq-client on infra_mq) (#1282). pcmk-drbd-ubuntu offers 26
-    like the other Ubuntu stacks (#1585), so the fleet-wide build succeeds."""
+    beside the shared boxes (mq-client on infra_mq) (#1282)."""
     names = box.boxes_for_build(BuildFile(os=OsRef("ubuntu", 26)), facts=_FACTS)
     assert names == [
         "infra-ubuntu26",
         "obs-ubuntu26",
-        "san-ubuntu26",
         "mq-client-ubuntu26",
-        "pcmk-ubuntu26",
         "mq-nativeha-ubuntu26",
-        "pdrbd-ubuntu26",
     ]
 
 
 def test_boxes_for_build_ubuntu24_stays_selectable():
     """With the Ubuntu defaults on 26 (#1285), a build file naming ubuntu:24 still bakes
-    both Ubuntu stacks on 24; the shared boxes stay on infra / infra_mq."""
+    the Ubuntu stack on 24; the shared boxes stay on infra / infra_mq."""
     names = box.boxes_for_build(BuildFile(os=OsRef("ubuntu", 24)), facts=_FACTS)
     assert names == [
         "infra-ubuntu26",
         "obs-ubuntu26",
-        "san-ubuntu26",
         "mq-client-ubuntu26",
-        "pcmk-ubuntu24",
         "mq-nativeha-ubuntu24",
-        "pdrbd-ubuntu24",
     ]
 
 
 def test_boxes_for_build_refuses_a_stack_missing_from_the_catalog():
     with pytest.raises(VersionError, match="unknown stack 'ghost'"):
-        box.boxes_for_build(BuildFile(os=None), facts=_FACTS, stack_roles={"ghost": {"pcmk"}})
+        box.boxes_for_build(
+            BuildFile(os=None), facts=_FACTS, stack_roles={"ghost": {"mq-nativeha"}}
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -1367,7 +1346,7 @@ def test_clean_retired_cache_deletes_dead_fat_box_caches(tmp_path):
     ]
     keep = [
         "mq-nativeha-ubuntu24-x86_64.box",  # a new name sharing the retired prefix
-        "pcmk-ubuntu24-aarch64.box",
+        "mq-nativeha-ubuntu26-aarch64.box",
         "rhel-9.6-x86_64-libvirt.box",  # the retired BASE cache: migrate renames it
     ]
     for name in dead + keep:
@@ -1389,8 +1368,8 @@ def test_gc_drops_every_image_of_a_retired_box(monkeypatch):
     old = "pcmk-ubuntu_vagrant_box_image_0_100_box.img"
     new = "pcmk-ubuntu_vagrant_box_image_0_200_box.img"
     base_old = "rhel-VAGRANTSLASH-9.6-x86_64_vagrant_box_image_0_5_box.img"
-    current = "pcmk-ubuntu24_vagrant_box_image_0_300_box.img"
-    overlay = "lab_pcmk-a1.img"  # a live VM still backed by the retired box
+    current = "obs-ubuntu26_vagrant_box_image_0_300_box.img"
+    overlay = "lab_obs.img"  # a live VM still backed by the retired box
     fake = _FakeVirsh(
         [old, new, base_old, current, overlay],
         {
@@ -1458,14 +1437,9 @@ def test_retired_summary_removed_verb():
 _RESOLVABLE = {
     "infra-ubuntu26",
     "obs-ubuntu26",
-    "san-ubuntu26",
     "mq-client-ubuntu26",
     "mq-nativeha-ubuntu24",
     "mq-nativeha-ubuntu26",
-    "pcmk-ubuntu24",
-    "pcmk-ubuntu26",
-    "pdrbd-ubuntu24",
-    "pdrbd-ubuntu26",
     "mq-nativeha-rhel9",
     "mq-nativeha-rhel10",
     "mq-rdqm-rhel9",
@@ -1476,7 +1450,7 @@ _RESOLVABLE = {
     "cloud-image/ubuntu-26.04",
 }
 # Left behind by `infra: ubuntu:26`, plus a shared MQ role on an OS infra_mq is not on.
-_UNRESOLVABLE = {"infra-ubuntu24", "obs-ubuntu24", "san-ubuntu24", "mq-client-ubuntu24"}
+_UNRESOLVABLE = {"infra-ubuntu24", "obs-ubuntu24", "mq-client-ubuntu24"}
 
 
 def test_resolvable_box_names_covers_every_selection_and_only_those():
@@ -1503,7 +1477,7 @@ def test_resolvable_box_names_is_not_host_filtered(monkeypatch):
         ("cloud-image/ubuntu-24.04", False),
         ("mq-ubuntu2404", False),  # no such role
         ("mq-nativeha-ubuntu", False),  # no major
-        ("pcmk-debian12", False),  # unknown family
+        ("mq-client-debian12", False),  # unknown family
         ("rhel-9", False),  # the base-box cache stem
     ],
 )
@@ -1512,7 +1486,7 @@ def test_generated_box_name(name, generated):
 
 
 _RHEL_BASE_VOL = "rhel-VAGRANTSLASH-9-x86_64_vagrant_box_image_0_5_box.img"
-_SAN24_VOL = "san-ubuntu24_vagrant_box_image_0_10_box.img"
+_NHA8_VOL = "mq-nativeha-rhel8_vagrant_box_image_0_10_box.img"
 _CLIENT24_VOL = "mq-client-ubuntu24_vagrant_box_image_0_20_box.img"
 _HA24_VOL = "mq-nativeha-ubuntu24_vagrant_box_image_0_30_box.img"
 _RETIRED_VOL = "obs-ubuntu2404_vagrant_box_image_0_40_box.img"
@@ -1540,9 +1514,8 @@ def _unreferenced_host(tmp_path, monkeypatch):
     (cache_dir / "infra-ubuntu24-work").mkdir()  # a builder scratch dir: not a cache file
     registered = [
         "infra-ubuntu24",
-        "san-ubuntu24",  # unreferenced but a live VM backs onto it
+        "mq-nativeha-rhel8",  # unreferenced (a dropped major) but a live VM backs onto it
         "mq-nativeha-ubuntu24",
-        "pcmk-ubuntu24",
         "mq-client-ubuntu26",
         "rhel/9-x86_64",
         "cloud-image/ubuntu-24.04",
@@ -1551,10 +1524,10 @@ def _unreferenced_host(tmp_path, monkeypatch):
     monkeypatch.setattr(box, "_registered_boxes", lambda: dict.fromkeys(registered, ""))
     removed: list[str] = []
     monkeypatch.setattr(box, "_vagrant_box_remove", removed.append)
-    overlay = "lab_san-a.img"
-    vols = [_RHEL_BASE_VOL, _SAN24_VOL, _CLIENT24_VOL, _HA24_VOL, _RETIRED_VOL, overlay]
+    overlay = "lab_nha-rhel-crr-a1.img"
+    vols = [_RHEL_BASE_VOL, _NHA8_VOL, _CLIENT24_VOL, _HA24_VOL, _RETIRED_VOL, overlay]
     xml = {name: _vol_xml(name, 100) for name in vols}
-    xml[overlay] = _vol_xml(overlay, 10, backing=_SAN24_VOL)
+    xml[overlay] = _vol_xml(overlay, 10, backing=_NHA8_VOL)
     fake = _FakeVirsh(vols, xml)
     _install_virsh(monkeypatch, fake)
     return cache_dir, removed, fake
@@ -1579,12 +1552,11 @@ def test_clean_unreferenced_reclaims_only_unresolvable_boxes(tmp_path, monkeypat
     assert obs == box.UnreferencedBox(
         "obs-ubuntu24", False, (str(cache_dir / "obs-ubuntu24-aarch64.box"),), False
     )
-    assert [b.name for b in result.in_use] == ["san-ubuntu24"]
+    assert [b.name for b in result.in_use] == ["mq-nativeha-rhel8"]
     assert result.resolvable == [
         "mq-client-ubuntu26",
         "mq-nativeha-rhel9",
         "mq-nativeha-ubuntu24",
-        "pcmk-ubuntu24",
     ]
     assert result.foreign == sorted(
         [
@@ -1595,7 +1567,7 @@ def test_clean_unreferenced_reclaims_only_unresolvable_boxes(tmp_path, monkeypat
         ]
     )
     assert result.dead_stems == frozenset({"infra-ubuntu24", "mq-client-ubuntu24", "obs-ubuntu24"})
-    assert removed_regs == ["infra-ubuntu24"]  # san-ubuntu24 stays: a live VM backs onto it
+    assert removed_regs == ["infra-ubuntu24"]  # mq-nativeha-rhel8 stays: a live VM backs it
     assert fake.deleted == []  # volumes are the GC pass's job (with dead_stems)
     assert sorted(p.name for p in cache_dir.iterdir()) == [
         "infra-ubuntu24-work",
@@ -1677,7 +1649,7 @@ def test_unreferenced_summary_renders_commands_and_reasons():
             box.UnreferencedBox("infra-ubuntu24", True, ("/c/infra-ubuntu24-x86_64.box",), True),
             box.UnreferencedBox("obs-ubuntu24", False, (), False),
         ],
-        in_use=[box.UnreferencedBox("san-ubuntu24", True, (), True)],
+        in_use=[box.UnreferencedBox("mq-nativeha-rhel8", True, (), True)],
         resolvable=["mq-nativeha-ubuntu26"],
         foreign=["cloud-image/ubuntu-24.04"],
         dry_run=False,
@@ -1689,7 +1661,7 @@ def test_unreferenced_summary_renders_commands_and_reasons():
         "      $ rm /c/infra-ubuntu24-x86_64.box",
         "      base-image volumes: reclaimed by the orphaned-image pass below",
         "  - obs-ubuntu24",
-        "  ~ san-ubuntu24 (kept — a live VM disk backs onto it; tear that VM down, then "
+        "  ~ mq-nativeha-rhel8 (kept — a live VM disk backs onto it; tear that VM down, then "
         "re-run `mqlab box gc --unreferenced`)",
         "  = mq-nativeha-ubuntu26 (kept — the catalog resolves it)",
         "  = cloud-image/ubuntu-24.04 (kept — not a catalog-generated box name)",
@@ -1766,7 +1738,6 @@ def test_box_build_config_builds_the_build_files_boxes(monkeypatch, tmp_path):
         "names": [
             "infra-ubuntu26",
             "obs-ubuntu26",
-            "san-ubuntu26",
             "mq-client-ubuntu26",
             "mq-rdqm-rhel9",
             "mq-nativeha-rhel9",

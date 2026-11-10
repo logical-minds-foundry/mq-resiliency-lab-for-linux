@@ -6,16 +6,16 @@ from mqlab.inventory import InventoryError, render_inventory
 
 TOPO = {
     "nodes": {
-        "san-a": {"nics": {"net-mgmt": "10.50.0.5"}},
-        "pcmk-a1": {"nics": {"net-mgmt": "10.50.0.51"}},
-        "pcmk-a2": {"nics": {"net-mgmt": "10.50.0.52"}},
+        "rdqm-a1": {"nics": {"net-mgmt": "10.50.0.31"}},
+        "rdqm-b1": {"nics": {"net-mgmt": "10.50.0.41"}},
+        "rdqm-b2": {"nics": {"net-mgmt": "10.50.0.42"}},
     },
     "groups": {
-        "san_a": ["san-a"],
-        "pcmk_a": ["pcmk-a1", "pcmk-a2"],
+        "rdqm_a": ["rdqm-a1"],
+        "rdqm_b": ["rdqm-b1", "rdqm-b2"],
     },
     "stacks": {
-        "pcmk-ubuntu": {"groups": ["san_a", "pcmk_a"], "provision": "ansible/site-pcmk.yml"},
+        "rdqm-rhel": {"groups": ["rdqm_a", "rdqm_b"], "provision": "ansible/site-rdqm.yml"},
     },
 }
 
@@ -23,15 +23,15 @@ TOPO = {
 def test_render_emits_groups_children_and_vars_in_order():
     out = render_inventory(TOPO)
     assert out == (
-        "[san_a]\n"
-        "san-a ansible_host=10.50.0.5\n"
-        "[pcmk_a]\n"
-        "pcmk-a1 ansible_host=10.50.0.51\n"
-        "pcmk-a2 ansible_host=10.50.0.52\n"
+        "[rdqm_a]\n"
+        "rdqm-a1 ansible_host=10.50.0.31\n"
+        "[rdqm_b]\n"
+        "rdqm-b1 ansible_host=10.50.0.41\n"
+        "rdqm-b2 ansible_host=10.50.0.42\n"
         # stack-aggregate group: hyphens -> underscores (#350)
-        "[pcmk_ubuntu:children]\n"
-        "san_a\n"
-        "pcmk_a\n"
+        "[rdqm_rhel:children]\n"
+        "rdqm_a\n"
+        "rdqm_b\n"
         "[all:vars]\n"
         "ansible_user=vagrant\n"
         "ansible_ssh_private_key_file=~/.vagrant.d/insecure_private_key\n"
@@ -42,34 +42,34 @@ def test_render_emits_groups_children_and_vars_in_order():
 
 def test_reserved_stack_with_no_groups_emits_no_aggregate():
     topo = {
-        "nodes": {"san-a": {"nics": {"net-mgmt": "10.50.0.5"}}},
-        "groups": {"san_a": ["san-a"]},
+        "nodes": {"rdqm-a1": {"nics": {"net-mgmt": "10.50.0.31"}}},
+        "groups": {"rdqm_a": ["rdqm-a1"]},
         "stacks": {
-            "pcmk-ubuntu": {"groups": ["san_a"]},
+            "rdqm-rhel": {"groups": ["rdqm_a"]},
             "nativeha-ubuntu": {"groups": []},  # reserved — no aggregate
         },
     }
     out = render_inventory(topo)
-    assert "[pcmk_ubuntu:children]" in out
+    assert "[rdqm_rhel:children]" in out
     assert "nativeha_ubuntu" not in out
 
 
 def test_missing_mgmt_ip_raises():
-    topo = {"nodes": {"san-a": {"nics": {}}}, "groups": {"san_a": ["san-a"]}, "stacks": {}}
-    with pytest.raises(InventoryError, match="no net-mgmt IP: san-a"):
+    topo = {"nodes": {"rdqm-a1": {"nics": {}}}, "groups": {"rdqm_a": ["rdqm-a1"]}, "stacks": {}}
+    with pytest.raises(InventoryError, match="no net-mgmt IP: rdqm-a1"):
         render_inventory(topo)
 
 
 def test_group_referencing_undefined_host_raises():
-    topo = {"nodes": {}, "groups": {"san_a": ["san-a"]}, "stacks": {}}
-    with pytest.raises(InventoryError, match="undefined host: san-a"):
+    topo = {"nodes": {}, "groups": {"rdqm_a": ["rdqm-a1"]}, "stacks": {}}
+    with pytest.raises(InventoryError, match="undefined host: rdqm-a1"):
         render_inventory(topo)
 
 
 def test_stack_referencing_undefined_group_raises():
     topo = {
-        "nodes": {"san-a": {"nics": {"net-mgmt": "10.50.0.5"}}},
-        "groups": {"san_a": ["san-a"]},
+        "nodes": {"rdqm-a1": {"nics": {"net-mgmt": "10.50.0.31"}}},
+        "groups": {"rdqm_a": ["rdqm-a1"]},
         "stacks": {"bad": {"groups": ["nope"]}},
     }
     with pytest.raises(InventoryError, match="undefined group: nope"):

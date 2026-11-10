@@ -2,7 +2,9 @@
 
 Every box name changed when box names became generated from the catalog
 (lab/versions.yaml). These are the names that existed before. They are kept here
-only so the one-time migration can find and remove them:
+only so the one-time migration can find and remove them. The boxes of the stacks the
+lab no longer carries (pcmk-ubuntu, pcmk-drbd-ubuntu, and their SAN targets; epic
+.github#399) are listed too, so the same pass reclaims them from hosts that built them:
 
 - ``mqlab box gc`` deregisters them from Vagrant, deletes their dead cache
   artifacts and reclaims their libvirt base-image volumes;
@@ -23,6 +25,12 @@ RETIRED_BOX_NAMES: tuple[str, ...] = (
     "mq-nativeha-ubuntu",
     "pcmk-ubuntu",
     "rhel/9.6-x86_64",
+    "pcmk-ubuntu24",
+    "pcmk-ubuntu26",
+    "pdrbd-ubuntu24",
+    "pdrbd-ubuntu26",
+    "san-ubuntu24",
+    "san-ubuntu26",
 )
 
 # The retired RHEL base box -> (its old cache filename under build/state/boxes/, the

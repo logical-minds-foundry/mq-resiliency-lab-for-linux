@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from mqlab.guestsel import lab_guest_names, resolve_guests, select_guests
 
-NAMES = ["node-a1", "node-a2", "pcmk-a1", "rdqm-a1"]
+NAMES = ["node-a1", "node-a2", "nha-ubuntu-a1", "rdqm-a1"]
 
 
 def test_select_all_returns_every_name():
@@ -10,7 +10,7 @@ def test_select_all_returns_every_name():
 
 
 def test_select_regex_matches_subset():
-    assert select_guests("pcmk", NAMES) == ["pcmk-a1"]
+    assert select_guests("nha", NAMES) == ["nha-ubuntu-a1"]
 
 
 def test_select_exact_name_matches_only_itself():
@@ -32,18 +32,18 @@ def test_resolve_filters_lab_guest_names(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "nodes:\n  pcmk-a1: {}\n  pcmk-b1: {}\n  node-a1: {}\n"
+        "nodes:\n  nha-ubuntu-a1: {}\n  nha-ubuntu-b1: {}\n  node-a1: {}\n"
     )
-    assert resolve_guests("pcmk") == ["pcmk-a1", "pcmk-b1"]
+    assert resolve_guests("nha") == ["nha-ubuntu-a1", "nha-ubuntu-b1"]
 
 
 def test_resolve_guests_resolves_a_stack_name_to_members_in_order(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  pcmk-a2: {}\n"
-        "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1, pcmk-a2]\n"
-        "stacks:\n  pcmk-ubuntu:\n    short: PCMK\n    groups: [san_a, pcmk_a]\n"
+        "nodes:\n  rdqm-a1: {}\n  rdqm-b1: {}\n  rdqm-b2: {}\n"
+        "groups:\n  rdqm_a: [rdqm-a1]\n  rdqm_b: [rdqm-b1, rdqm-b2]\n"
+        "stacks:\n  rdqm-rhel:\n    short: RDQM\n    groups: [rdqm_a, rdqm_b]\n"
     )
     # a stack name wins over regex, and returns members in declared (bring-up) order
-    assert resolve_guests("pcmk-ubuntu") == ["san-a", "pcmk-a1", "pcmk-a2"]
+    assert resolve_guests("rdqm-rhel") == ["rdqm-a1", "rdqm-b1", "rdqm-b2"]

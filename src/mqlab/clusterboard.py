@@ -171,8 +171,12 @@ _REFIDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # Shared cluster_* metrics (cluster_node_online, cluster_quorate, cluster_resource_owner) are
 # emitted by EVERY arm's collector into one Prometheus, so every board query over them MUST be
 # scoped to its own arm's ansible groups — otherwise one cluster's nodes leak into another's
-# board (#279: the nha arm's nodes showed up on the PCMK board). cluster_resource_owner is
-# additionally resource-scoped (mq_qm vs NHARCAPP), so it needs no group scope.
+# board (#279). cluster_resource_owner is additionally resource-scoped (e.g. NHARCAPP),
+# so it needs no group scope.
+#
+# _PCMK_SEL and the panel helpers that read it (hero_tiles, integrity_panel, timeline_band,
+# _COMPUTE_COLS, _STORAGE_COLS) belong to no board today: they are kept, with their tests,
+# as building blocks for the planned dashboard rework (epic .github#399 spec §4.1).
 _PCMK_SEL = '{groups=~"pcmk_a|pcmk_b"}'
 _NHA_SEL = '{groups=~"nha_rhel_crr_a|nha_rhel_crr_b"}'
 _RDQM_SEL = '{groups=~"rdqm_a|rdqm_b"}'
@@ -598,7 +602,7 @@ def _state_timeline(
 
 
 def timeline_band(ds_uid: str, y: int) -> dict[str, Any]:
-    """The PCMK failover-story band (nodes/QM/DRBD/quorum over the drill window)."""
+    """A failover-story band (nodes/QM/DRBD/quorum over the drill window)."""
     return _state_timeline("⟳ Failover timeline", _TIMELINE_SIGNALS, ds_uid, y)
 
 
@@ -628,17 +632,6 @@ def _logs_panel(
     return panel
 
 
-def log_row(loki_uid: str, y: int) -> dict[str, Any]:
-    """The PCMK cluster-node log row (corosync/pacemaker/drbd/mq units on pcmk-/san- hosts)."""
-    # unit!="mq-events" keeps the instrumentation-event stream (#517) off the log panel —
-    # the .*mq.* wildcard would otherwise sweep it in.
-    sel = (
-        '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*", '
-        'unit!="mq-events"} |~ `${level}`'
-    )
-    return _logs_panel("▤ Cluster logs (severity: $level)", sel, loki_uid, y)
-
-
 def _timeseries(
     title: str,
     targets: list[dict[str, Any]],
@@ -665,80 +658,9 @@ def _timeseries(
     }
 
 
-_CLUSTER_GROUPS = "pcmk_a|pcmk_b|san_a|san_b"
-
-
 def _t(ref: str, expr: str, legend: str) -> dict[str, Any]:
     """A timeseries target (range query) with a legend."""
     return {"refId": ref, "expr": expr, "legendFormat": legend, "range": True}
-
-
-def perf_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
-    """§3 perf from existing metrics: CPU busy%, SAN disk I/O, DRBD (net-wan) throughput."""
-    cpu_busy = (
-        "100 - (avg by (host)(rate("
-        f'node_cpu_seconds_total{{groups=~"{_CLUSTER_GROUPS}", mode="idle"}}[1m]'
-        ")) * 100)"
-    )
-    disk_r = 'rate(node_disk_read_bytes_total{host=~"san-.*"}[1m])'
-    disk_w = 'rate(node_disk_written_bytes_total{host=~"san-.*"}[1m])'
-    wan_rx = 'rate(node_network_receive_bytes_total{device="virbr-wan"}[1m])'
-    wan_tx = 'rate(node_network_transmit_bytes_total{device="virbr-wan"}[1m])'
-    return [
-        _timeseries(
-            "CPU busy % — cluster nodes",
-            [_t("A", cpu_busy, "{{host}}")],
-            ds_uid,
-            0,
-            y,
-            unit="percent",
-        ),
-        _timeseries(
-            "SAN disk I/O",
-            [_t("A", disk_r, "{{host}} read"), _t("B", disk_w, "{{host}} write")],
-            ds_uid,
-            8,
-            y,
-            unit="Bps",
-        ),
-        _timeseries(
-            "DRBD throughput (net-wan)",
-            [_t("A", wan_rx, "rx"), _t("B", wan_tx, "tx")],
-            ds_uid,
-            16,
-            y,
-            unit="Bps",
-        ),
-    ]
-
-
-_CLUSTER_PLANES = "net-hb-a|net-hb-b|net-san-a|net-san-b|net-wan|net-data-a|net-data-b"
-
-
-def net_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
-    """§4 network from existing metrics: per-plane state + throughput, scoped to the
-    planes this cluster rides (heartbeat, SAN, WAN replication, data)."""
-    state = f'lab_network_state{{network=~"{_CLUSTER_PLANES}"}}'
-    thru = 'rate(node_network_receive_bytes_total{device=~"virbr-(hb|san|wan|data).*"}[1m])'
-    return [
-        _timeseries(
-            "Cluster network planes — state",
-            [_t("A", state, "{{network}}")],
-            ds_uid,
-            0,
-            y,
-            w=12,
-        ),
-        _timeseries(
-            "Cluster network throughput",
-            [_t("A", thru, "{{device}}")],
-            ds_uid,
-            12,
-            y,
-            w=12,
-            unit="Bps",
-        ),
-    ]
 
 
 # ── Native HA: timeline · logs · CRR card · perf · network ────────────────────
@@ -878,7 +800,7 @@ def nativeha_perf_section(
     ds_uid: str, y: int, groups: str = "nha_rhel_crr_a|nha_rhel_crr_b"
 ) -> list[dict[str, Any]]:
     """Perf from existing node metrics: CPU busy%, intra-site raft (net-hb) throughput, and
-    cross-region CRR (net-wan) throughput. No SAN disk — Native HA has no storage tier.
+    cross-region CRR (net-wan) throughput. No disk I/O — Native HA has no storage tier.
     `groups` scopes CPU to this arm's ansible groups (RHEL by default)."""
     cpu_busy = (
         "100 - (avg by (host)(rate("
@@ -1002,7 +924,7 @@ def _fit_table(panel: dict[str, Any]) -> dict[str, Any]:
       column below its content/min width, so the default floor — not any vertical scrollbar — is
       what forced the scroll; panel heights are right-sized separately for the vertical waste.
 
-    Scoped to the rdqm matrices so the PCMK/NHA boards are untouched."""
+    Scoped to the rdqm matrices so the Native HA boards are untouched."""
     org = next(t for t in panel["transformations"] if t["id"] == "organize")
     keep = list(org["options"]["renameByName"].values())  # ["node", <column titles…>]
     panel["transformations"].append(
@@ -1090,7 +1012,7 @@ def _rdqm_site_badge(group: str, ds_uid: str, x: int, y: int) -> dict[str, Any]:
 
 
 def _rdqm_integrity_expr() -> str:
-    """RDQM is DRBD under Pacemaker, so it CAN split-brain — the integrity light is PCMK-style.
+    """RDQM is DRBD under Pacemaker, so it CAN split-brain — the integrity light is DRBD-style.
     It goes loud on the DRBD storage hazards (StandAlone / per-resource dual-primary / Diskless)
     PLUS the RDQM HA status ≠ Normal, gated on data present so no-data reads STALE (spec §6).
     DRBD hazards are scoped to rdqm groups so another arm's DRBD can't trip this light."""
@@ -1192,11 +1114,11 @@ def _rdqm_storage_cols(qm: str) -> list[Column]:
 
 
 def _rdqm_pacemaker_cols(site_regex: str, qm: str) -> list[Column]:
-    """⑤ Pacemaker resources for one site (the technology layer rdqmadm wraps, exposed exactly
-    like the PCMK board's compute matrix): per node — online · the QM resource · the HA + DR
-    DRBD clones · the floating-IP resource (each as a pm_state cell) · the QM fail-count. The
-    fail-count cell is the one that turns RED when pacemaker has banned the QM from a node — the
-    failure that rdqmstatus reports as HA-Normal and the board was previously blind to (#287)."""
+    """⑤ Pacemaker resources for one site (the technology layer rdqmadm wraps): per node —
+    online · the QM resource · the HA + DR DRBD clones · the floating-IP resource (each as a
+    pm_state cell) · the QM fail-count. The fail-count cell is the one that turns RED when
+    pacemaker has banned the QM from a node — the failure that rdqmstatus reports as
+    HA-Normal and the board was previously blind to (#287)."""
     member = f'member=~"{site_regex}"'
     base = _rdqm_resource_base(qm)
 
@@ -1432,11 +1354,9 @@ def _rdqm_board(ds_uid: str, qm: str) -> dict[str, Any]:
         _fit_table(matrix("Site A", site_a, ds_uid, y=7, h=6, x=4, w=20)),
         _rdqm_site_badge("rdqm_b", ds_uid, 0, 13),
         _fit_table(matrix("Site B", site_b, ds_uid, y=13, h=6, x=4, w=20)),
-        # ③ The pacemaker resource layer rdqmadm wraps, exposed like the PCMK board's compute
-        # matrix and placed in the SAME position (above storage) so an RDQM board and an Ubuntu
-        # pacemaker board read top-to-bottom the same way — both ride pacemaker + DRBD. This is
-        # the layer rdqmstatus is blind to: a QM pacemaker can't start (fail-count → BANNED)
-        # shows here even while HA status reads Normal (#287).
+        # ③ The pacemaker resource layer rdqmadm wraps, placed above storage. This is the
+        # layer rdqmstatus is blind to: a QM pacemaker can't start (fail-count → BANNED) shows
+        # here even while HA status reads Normal (#287).
         _row_header("③ Pacemaker resources — Site A & Site B", y=19),
         _fit_table(matrix("Pacemaker — Site A", pm_a, ds_uid, y=20, h=6)),
         _fit_table(matrix("Pacemaker — Site B", pm_b, ds_uid, y=26, h=6)),
@@ -1475,13 +1395,11 @@ def _rdqm_board(ds_uid: str, qm: str) -> dict[str, Any]:
 # board names the OS the stack actually runs ("Ubuntu 24", "RHEL 9") with no version
 # literal (epic .github#280).
 _ARM_NAMES = {
-    "pcmk-ubuntu": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN",
     "nativeha-rhel-crr": "MQ raft Native HA + CRR cross-region",
     "nativeha-ubuntu": "MQ raft Native HA + CRR cross-region",
     "rdqm-rhel": "DRBD + Pacemaker HA (rdqmadm) + cross-site DR (rdqmdr)",
 }
 _ARM_KIND = {
-    "pcmk-ubuntu": "PCMK Cluster",
     "nativeha-rhel-crr": "Native HA Cluster",
     "nativeha-ubuntu": "Native HA Cluster",
     "rdqm-rhel": "RDQM Cluster",
@@ -1518,7 +1436,7 @@ def _row_header(title: str, y: int) -> dict[str, Any]:
 def _nativeha_board(ds_uid: str, arm: str = "nativeha-rhel-crr") -> dict[str, Any]:
     """The Native HA cockpit, top-to-bottom: title banner · ① hero + integrity · ② instances
     matrices (Live / Recovery) · ③ CRR card · failover+CRR timeline · logs · perf · network.
-    No storage section — Native HA has no DRBD/SAN tier. One assembly serves both Native HA
+    No storage section — Native HA has no DRBD tier. One assembly serves both Native HA
     arms (RHEL #246, Ubuntu #417); `arm` selects the QM/groups/host-prefix/uid (#417)."""
     spec = _NHA_ARM_SPEC[arm]
     qm, groups, prefix = spec["qm"], spec["groups"], spec["prefix"]
@@ -1567,43 +1485,19 @@ def _nativeha_board(ds_uid: str, arm: str = "nativeha-rhel-crr") -> dict[str, An
 
 def render_cluster_dashboard(
     topo: dict[str, Any],  # noqa: ARG001 - reserved: later PRs derive rows/sites from topology
-    arm: str = "pcmk-ubuntu",
+    arm: str,
     ds_uid: str = "prometheus",
 ) -> dict[str, Any]:
-    """Assemble the cockpit board for the given arm. PCMK: hero + integrity + ② Compute / ③
-    Storage matrices + timeline/logs/perf/net. Native HA dispatches to its own assembly
-    (instances matrices, the §6 integrity reframing). The RDQM board takes its QM from the
-    stack's single QM source (topology `short` -> `<short>APP`), never a literal (#1472)."""
+    """Assemble the cockpit board for the given arm. Native HA dispatches to its own
+    assembly (instances matrices, the §6 integrity reframing). The RDQM board takes its QM
+    from the stack's single QM source (topology `short` -> `<short>APP`), never a literal
+    (#1472). An arm with no cockpit board raises, never renders a guess."""
     if arm in _NHA_ARM_SPEC:
         return _nativeha_board(ds_uid, arm)
     if arm == "rdqm-rhel":
         return _rdqm_board(ds_uid, lab_stacks()[arm].qm.qm_app)
-    panels = [
-        _title_banner(arm, y=0),
-        _row_header("① Cluster status — health · owner · quorum · integrity", y=2),
-        *hero_tiles(ds_uid, y=3),
-        integrity_panel(ds_uid, y=7),
-        matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=10),
-        # storage has only san-a/san-b — size it to two rows + header (h=5 so san-b
-        # isn't clipped), don't waste the space (#219)
-        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=19, h=5),
-        timeline_band(ds_uid, y=24),
-        log_row("loki", y=31),
-        *perf_section(ds_uid, y=39),
-        *net_section(ds_uid, y=46),
-    ]
-    return {
-        "uid": cockpit_uid(arm),
-        "title": "PCMK Cluster · Infrastructure View",
-        "schemaVersion": 39,
-        "version": 0,
-        "panels": panels,
-        "templating": {"list": [_log_level_var()]},
-        "annotations": _annotations(ds_uid),
-        "time": {"from": "now-15m", "to": "now"},
-        "refresh": "10s",
-        "tags": ["lab", "cockpit", arm],
-    }
+    msg = f"no cockpit board for arm {arm!r}"
+    raise ValueError(msg)
 
 
 def _cockpit_stacks() -> list[Stack]:

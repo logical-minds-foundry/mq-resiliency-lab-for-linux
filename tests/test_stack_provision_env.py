@@ -46,20 +46,20 @@ def _deps(runner):
     )
 
 
+# Two secrets (the second a fixture-only name) so the declared sourcing order shows.
 _TOPO = (
     "nodes:\n"
-    "  san-a:   {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
-    "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
-    "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
-    "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n"
-    "    os_family: ubuntu\n    short: PCMK\n"
-    "    cluster_group: pcmk_a\n    groups: [san_a, pcmk_a]\n"
-    "    provision: ansible/site-pcmk.yml\n"
-    "    secrets: [pcmk_hacluster_password, mqweb_aes_passphrase]\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
+    "  nha-ubuntu-a1: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.11}}\n"
+    "  nha-ubuntu-b1: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.14}}\n"
+    "groups:\n  nha_ubuntu_a: [nha-ubuntu-a1]\n  nha_ubuntu_b: [nha-ubuntu-b1]\n"
+    "stacks:\n  nativeha-ubuntu:\n    mechanism: native-ha\n"
+    "    os_family: ubuntu\n    short: NHAU\n"
+    "    cluster_group: nha_ubuntu_a\n    groups: [nha_ubuntu_a, nha_ubuntu_b]\n"
+    "    provision: ansible/site-nativeha-ubuntu.yml\n"
+    "    secrets: [cluster_password, mqweb_aes_passphrase]\n"
+    "    qm: {}\n"
     "    verbs:\n"
-    "      qm-create: { playbook: site-pcmk.yml }\n"
-    "      qm-destroy: { playbook: site-pcmk-qm-down.yml }\n"
+    "      qm-create: { playbook: site-nativeha-ubuntu.yml }\n"
     "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
 )
 
@@ -78,7 +78,7 @@ def _probe(states):
     return ScriptedResult(lines)
 
 
-_ALL_UP = {"san-a": "running", "pcmk-a1": "running"}
+_ALL_UP = {"nha-ubuntu-a1": "running", "nha-ubuntu-b1": "running"}
 
 
 # --- the shared env -----------------------------------------------------------------
@@ -86,16 +86,16 @@ _ALL_UP = {"san-a": "running", "pcmk-a1": "running"}
 
 def test_stack_provision_env_sources_every_secret_and_the_mqweb_state_dir(lab):
     runner = RecordingRunner(results=[ScriptedResult(["  hapw  "]), ScriptedResult(["aes"])])
-    env = cli._stack_provision_env(_deps(runner), cli.lab_stacks()["pcmk-ubuntu"])
+    env = cli._stack_provision_env(_deps(runner), cli.lab_stacks()["nativeha-ubuntu"])
     assert env == {
-        "PCMK_HACLUSTER_PASSWORD": "hapw",
+        "CLUSTER_PASSWORD": "hapw",
         "MQWEB_AES_PASSPHRASE": "aes",
         "MQWEB_STATE_DIR": str(paths.state("mqweb")),
     }
     assert env["MQWEB_STATE_DIR"] == str(lab / "build" / "state" / "mqweb")
     # sourced through lab-secret.sh, in the stack's declared order
     assert [c.argv[-1] for c in runner.recorded] == [
-        "pcmk_hacluster_password",
+        "cluster_password",
         "mqweb_aes_passphrase",
     ]
 
@@ -103,7 +103,7 @@ def test_stack_provision_env_sources_every_secret_and_the_mqweb_state_dir(lab):
 def test_stack_provision_env_fails_loud_when_a_secret_cannot_be_sourced(lab):
     runner = RecordingRunner(results=[ScriptedResult(["boom"], exit_code=1)])
     with pytest.raises(typer.Exit):
-        cli._stack_provision_env(_deps(runner), cli.lab_stacks()["pcmk-ubuntu"])
+        cli._stack_provision_env(_deps(runner), cli.lab_stacks()["nativeha-ubuntu"])
 
 
 # --- qm create ----------------------------------------------------------------------
@@ -114,12 +114,12 @@ def test_qm_create_runs_the_playbook_with_the_provision_env(monkeypatch, lab):
     monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"v-{name}")
     runner = RecordingRunner(results=[_probe(_ALL_UP), ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "create", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "create", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     play = runner.recorded[-1]
-    assert play.argv[:2] == ["ansible-playbook", "site-pcmk.yml"]
+    assert play.argv[:2] == ["ansible-playbook", "site-nativeha-ubuntu.yml"]
     assert play.env == {
-        "PCMK_HACLUSTER_PASSWORD": "v-pcmk_hacluster_password",
+        "CLUSTER_PASSWORD": "v-cluster_password",
         "MQWEB_AES_PASSPHRASE": "v-mqweb_aes_passphrase",
         "MQWEB_STATE_DIR": str(paths.state("mqweb")),
     }
@@ -131,9 +131,9 @@ def test_qm_create_runs_the_playbook_with_the_provision_env(monkeypatch, lab):
 def test_qm_create_with_members_down_sources_no_secrets(monkeypatch, lab):
     sourced: list[str] = []
     monkeypatch.setattr(cli, "_source_secret", lambda deps, name: sourced.append(name) or "x")
-    runner = RecordingRunner(results=[_probe({"san-a": "running"})])
+    runner = RecordingRunner(results=[_probe({"nha-ubuntu-a1": "running"})])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "create", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "create", "nativeha-ubuntu"])
     assert result.exit_code == 3
     assert sourced == []
 
@@ -143,20 +143,9 @@ def test_qm_create_stops_when_a_secret_cannot_be_sourced(monkeypatch, lab):
         results=[_probe(_ALL_UP), ScriptedResult(["boom"], exit_code=1)]  # lab-secret.sh
     )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "create", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "create", "nativeha-ubuntu"])
     assert result.exit_code == 2
     assert all(c.argv[0] != "ansible-playbook" for c in runner.recorded)
-
-
-def test_qm_destroy_carries_no_provision_env(monkeypatch, lab):
-    sourced: list[str] = []
-    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: sourced.append(name) or "x")
-    runner = RecordingRunner(results=[_probe(_ALL_UP), ScriptedResult([])])
-    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "destroy", "pcmk-ubuntu"])
-    assert result.exit_code == 0
-    assert runner.recorded[-1].env is None
-    assert sourced == []
 
 
 # --- vm provision-env ---------------------------------------------------------------
@@ -164,19 +153,19 @@ def test_qm_destroy_carries_no_provision_env(monkeypatch, lab):
 
 def test_vm_provision_env_prints_shell_exports_that_round_trip(monkeypatch, lab):
     tricky = "it's a $ecret; `x`"
-    values = {"pcmk_hacluster_password": tricky, "mqweb_aes_passphrase": "aes"}
+    values = {"cluster_password": tricky, "mqweb_aes_passphrase": "aes"}
     monkeypatch.setattr(cli, "_source_secret", lambda deps, name: values[name])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
-    result = CliRunner().invoke(cli.app, ["vm", "provision-env", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["vm", "provision-env", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     lines = result.stdout.splitlines()
     assert [ln.split("=", 1)[0] for ln in lines] == [
-        "export PCMK_HACLUSTER_PASSWORD",
+        "export CLUSTER_PASSWORD",
         "export MQWEB_AES_PASSPHRASE",
         "export MQWEB_STATE_DIR",
     ]
     # Evaluated by bash exactly as dr-provision.sh does, each value survives verbatim.
-    probe = 'eval "$1"; printf "%s\\n" "$PCMK_HACLUSTER_PASSWORD" "$MQWEB_STATE_DIR"'
+    probe = 'eval "$1"; printf "%s\\n" "$CLUSTER_PASSWORD" "$MQWEB_STATE_DIR"'
     out = subprocess.run(  # noqa: S603
         ["bash", "-c", probe, "probe", result.stdout],  # noqa: S607
         capture_output=True,
@@ -196,7 +185,7 @@ def test_vm_provision_env_unknown_stack_exits_2(lab):
 def test_vm_provision_env_prints_nothing_when_a_secret_fails(monkeypatch, lab):
     runner = RecordingRunner(results=[ScriptedResult(["boom"], exit_code=1)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["vm", "provision-env", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["vm", "provision-env", "nativeha-ubuntu"])
     assert result.exit_code == 2
     assert "export" not in result.stdout
 

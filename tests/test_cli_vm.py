@@ -37,37 +37,37 @@ def test_vm_inventory_writes_and_echoes(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "nodes:\n  san-a: {nics: {net-mgmt: 10.50.0.5}}\n"
-        "groups:\n  san_a: [san-a]\n"
-        "stacks:\n  pcmk-ubuntu: {short: PCMK, groups: [san_a]}\n"
+        "nodes:\n  rdqm-a1: {nics: {net-mgmt: 10.50.0.31}}\n"
+        "groups:\n  rdqm_a: [rdqm-a1]\n"
+        "stacks:\n  rdqm-rhel: {short: RDQM, groups: [rdqm_a]}\n"
     )
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "inventory"])
     assert result.exit_code == 0
     written = (tmp_path / "build" / "work" / "inventory.ini").read_text()
-    assert "[san_a]" in written
-    assert "san-a ansible_host=10.50.0.5" in written
-    assert "[pcmk_ubuntu:children]" in written
+    assert "[rdqm_a]" in written
+    assert "rdqm-a1 ansible_host=10.50.0.31" in written
+    assert "[rdqm_rhel:children]" in written
 
 
 def test_vm_roster_writes_and_echoes(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "nodes:\n  san-a: {nics: {net-mgmt: 10.50.0.5}}\n"
-        "groups:\n  san_a: [san-a]\n"
-        "stacks:\n  pcmk-ubuntu: {short: PCMK, groups: [san_a]}\n"
+        "nodes:\n  rdqm-a1: {nics: {net-mgmt: 10.50.0.31}}\n"
+        "groups:\n  rdqm_a: [rdqm-a1]\n"
+        "stacks:\n  rdqm-rhel: {short: RDQM, groups: [rdqm_a]}\n"
     )
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "roster"])
     assert result.exit_code == 0
     written = (tmp_path / "build" / "work" / "salt" / "roster").read_text()
-    assert "san-a:" in written
-    assert "host: 10.50.0.5" in written
-    assert "roster_groups:\n      - san_a" in written
-    assert "roster_stacks:\n      - pcmk-ubuntu" in written
+    assert "rdqm-a1:" in written
+    assert "host: 10.50.0.31" in written
+    assert "roster_groups:\n      - rdqm_a" in written
+    assert "roster_stacks:\n      - rdqm-rhel" in written
 
 
 # --- vm ssh: TTY passthrough; runs from lab/ against the shared dotfile (#355) ---

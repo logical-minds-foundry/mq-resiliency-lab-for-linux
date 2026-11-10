@@ -36,7 +36,7 @@ def test_needs_exporter_binary_true_for_exporter_roles():
 
 def test_needs_exporter_binary_false_otherwise():
     assert not mqexporter.needs_exporter_binary([])
-    assert not mqexporter.needs_exporter_binary(["pcmk", "infra", None])
+    assert not mqexporter.needs_exporter_binary(["mq-nativeha", "infra", None])
     assert not mqexporter.needs_exporter_binary(["obs"])  # obs carries no exporter (#1584)
 
 

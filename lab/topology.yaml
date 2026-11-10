@@ -6,14 +6,13 @@
 # spike report (docs/reports/2026-06-06-phase-a-provider-spike.md).
 #
 # Every node carries a net-mgmt NIC (10.50.0.0/24): the dedicated, host-only
-# management plane Ansible connects over, kept off the modeled data/hb/san
+# management plane Ansible connects over, kept off the modeled data/hb
 # planes. The inventory is rendered from this file (mqlab vm inventory, #101).
 #
 # Box ROLES, not boxes (epic .github#280): each node declares `box: <role>`, a role
 # under roles: in lab/versions.yaml. mqlab's version layer (src/mqlab/versions.py
 # node_boxes) picks the concrete `<role>-<os><major>` box per node: shared nodes
-# (infra roles: infra, obs, mq-client, and san for the SAN targets) run the catalog's
-# infra OS; every other role runs its owning stack's OS (instance record, else the
+# (infra roles: infra, obs, mq-client) run the catalog's infra OS; every other role runs its owning stack's OS (instance record, else the
 # stack default). No version token appears in this file; each stack declares only
 # its `os_family`. Every Ubuntu box tracks the host arch (native-preferred, #276);
 # RHEL boxes are x86_64-pinned by the catalog. What each fat box bakes in is
@@ -24,7 +23,7 @@ defaults: { cpus: 1, memory: 1024 }
 # per `vagrant up` (#638) instead of all at once. vagrant-libvirt has no native "N at a
 # time" (all-parallel by default, or fully serial via --no-parallel), so mqlab chunks
 # the ordered node list and issues one `vagrant up <batch>` per group — preserving the
-# HADR bring-up order (SANs first, site-A before site-B; batches are contiguous slices,
+# HADR bring-up order (site-A before site-B; batches are contiguous slices,
 # never reordered). Rationale: booting all 12 fat boxes at once (multi-GB image copies +
 # the RDQM drbdpool vdb creates) spikes host disk I/O hard enough to time a heavy guest
 # (infra-client, 4 NICs) out on SSH ('inaccessible') while its siblings come up, and it
@@ -123,7 +122,7 @@ nodes:
   # on an x86 host; TCG (emulated) only when the host is arm64/macOS (resolved per host by
   # src/mqlab/platforms.py _provider). ---
   # Both sites carry net-ext so the SVC partner link (our_conn) and this QM's own sender
-  # to SVCQM reach it wherever DR has it running (#1622, the #1428 pdrbd fix). Site B's
+  # to SVCQM reach it wherever DR has it running (#1622). Site B's
   # net-ext is .34-.36, NOT the mgmt-mirroring .41-.43: 10.60.0.40-.49 is the vendor
   # (svc-sim-a/-b) address block reserved by the two-site SVC DR plan (#237).
   rdqm-a1:
@@ -162,56 +161,6 @@ nodes:
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.43, net-data-b: 10.10.2.43, net-hb-b: 172.16.2.43, net-wan: 10.99.0.43, net-ext: 10.60.0.36 }
-
-  # --- Phase D: Pacemaker/SAN arm, arm64 KVM (spec 10-D) ---
-  san-a:
-    box: san  # the baked SAN target box on the infra OS: DRBD + LIO, no MQ payload (spec §4.7.1)
-    extra_disk: 8
-    nics: { net-mgmt: 10.50.0.5, net-san-a: 10.40.1.5, net-wan: 10.99.0.5 }
-  # The six Pacemaker CLUSTER nodes boot the baked pcmk-role fat box (#103 T7) so a
-  # bootstrap skips the MQ product install; the per-run cluster/SAN/STONITH/QM formation
-  # still runs. host-arch resolution is preserved AT THE BOX LAYER (the Ubuntu pcmk box
-  # carries no `arch:` pin). The SAN targets san-a/san-b boot their own baked `san` box
-  # (no MQ payload; spec §4.7.1, which supersedes .github#108's deb cache).
-  pcmk-a1:
-    box: pcmk
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.51, net-data-a: 10.10.1.51, net-hb-a: 172.16.1.51, net-san-a: 10.40.1.51, net-wan: 10.99.0.51, net-ext: 10.60.0.51 }
-  pcmk-a2:
-    box: pcmk
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.52, net-data-a: 10.10.1.52, net-hb-a: 172.16.1.52, net-san-a: 10.40.1.52, net-wan: 10.99.0.52, net-ext: 10.60.0.52 }
-  pcmk-a3:
-    box: pcmk
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.53, net-data-a: 10.10.1.53, net-hb-a: 172.16.1.53, net-san-a: 10.40.1.53, net-wan: 10.99.0.53, net-ext: 10.60.0.53 }
-
-  # --- Phase D DR: site B mirrors site A on the .2/.6x address plan. san-b is
-  # the DRBD secondary (LUN replicated from san-a over net-wan); pcmk-b1..3 are
-  # the peer cluster that receives the QM on cutover. hb IPs (172.16.2.61-63)
-  # match ansible/site-pcmk-dr.yml; site-B VIP is 10.10.2.200, portal 10.40.2.6.
-  san-b:
-    box: san  # the baked SAN target box on the infra OS: DRBD + LIO, no MQ payload (spec §4.7.1)
-    extra_disk: 8
-    nics: { net-mgmt: 10.50.0.6, net-san-b: 10.40.2.6, net-wan: 10.99.0.6 }
-  pcmk-b1:
-    box: pcmk
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.61, net-data-b: 10.10.2.51, net-hb-b: 172.16.2.61, net-san-b: 10.40.2.51, net-wan: 10.99.0.61, net-ext: 10.60.0.61 }
-  pcmk-b2:
-    box: pcmk
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.62, net-data-b: 10.10.2.52, net-hb-b: 172.16.2.62, net-san-b: 10.40.2.52, net-wan: 10.99.0.62, net-ext: 10.60.0.62 }
-  pcmk-b3:
-    box: pcmk
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63, net-ext: 10.60.0.63 }
 
   # --- Native HA CRR arm (#246, #267, #227): six RHEL x86_64 nodes, shared-nothing
   # (raft log replication — NO extra_disk). Site A = nha_rhel_crr_a (HA, Phase 1);
@@ -255,8 +204,7 @@ nodes:
   # of the RHEL arm above. Same shared-nothing raft shape (NO extra_disk), same
   # net plan — HA replication on net-hb, CRR over net-wan. Site A = nha_ubuntu_a
   # (HA), site B = nha_ubuntu_b (CRR/DR). Host octets .1x — clear of every other
-  # arm (rdqm .3x/.4x, pcmk .5x/.6x, nha-rhel .9x) so this arm can
-  # COEXIST with the running pcmk-ubuntu arm on one host (#417 goal).
+  # arm (rdqm .3x/.4x, nha-rhel .9x) so the arms can coexist on one host (#417 goal).
   #
   # They boot the baked mq-nativeha-role Ubuntu fat box (#103 T6) so a bootstrap skips the MQ
   # install — the OS-as-only-variable peer of the x86-pinned nha-rhel arm. Host-arch
@@ -295,65 +243,17 @@ nodes:
     memory: 2048
     nics: { net-mgmt: 10.50.0.16, net-data-b: 10.10.2.13, net-hb-b: 172.16.2.13, net-wan: 10.99.0.16 }
 
-  # --- pacemaker-drbd arm (epic .github#310): the RDQM-faithful open-source arm. Six
-  # Ubuntu cluster nodes, SHARED-NOTHING like RDQM: each has a local extra disk for the
-  # drbdpool VG (one LV per QM, DRBD 9 replicated); no SAN, no net-san-*. Host octets
-  # .7x (site A) / .8x (site B) — clear of every other arm so it can coexist. They boot
-  # the baked pdrbd box (MQ + LINBIT DRBD 9); host-arch resolution stays at the box layer.
-  pdrbd-a1:
-    box: pdrbd
-    cpus: 2
-    memory: 2048
-    extra_disk: 10
-    nics: { net-mgmt: 10.50.0.71, net-data-a: 10.10.1.71, net-hb-a: 172.16.1.71, net-wan: 10.99.0.71, net-ext: 10.60.0.71 }
-  pdrbd-a2:
-    box: pdrbd
-    cpus: 2
-    memory: 2048
-    extra_disk: 10
-    nics: { net-mgmt: 10.50.0.72, net-data-a: 10.10.1.72, net-hb-a: 172.16.1.72, net-wan: 10.99.0.72, net-ext: 10.60.0.72 }
-  pdrbd-a3:
-    box: pdrbd
-    cpus: 2
-    memory: 2048
-    extra_disk: 10
-    nics: { net-mgmt: 10.50.0.73, net-data-a: 10.10.1.73, net-hb-a: 172.16.1.73, net-wan: 10.99.0.73, net-ext: 10.60.0.73 }
-  pdrbd-b1:
-    box: pdrbd
-    cpus: 2
-    memory: 2048
-    extra_disk: 10
-    nics: { net-mgmt: 10.50.0.81, net-data-b: 10.10.2.81, net-hb-b: 172.16.2.81, net-wan: 10.99.0.81, net-ext: 10.60.0.81 }
-  pdrbd-b2:
-    box: pdrbd
-    cpus: 2
-    memory: 2048
-    extra_disk: 10
-    nics: { net-mgmt: 10.50.0.82, net-data-b: 10.10.2.82, net-hb-b: 172.16.2.82, net-wan: 10.99.0.82, net-ext: 10.60.0.82 }
-  pdrbd-b3:
-    box: pdrbd
-    cpus: 2
-    memory: 2048
-    extra_disk: 10
-    nics: { net-mgmt: 10.50.0.83, net-data-b: 10.10.2.83, net-hb-b: 172.16.2.83, net-wan: 10.99.0.83, net-ext: 10.60.0.83 }
-
 # groups — atomic role × site groups, each host listed exactly once. These are the
 # shared grouping namespace: the Ansible inventory renders them verbatim and the
 # playbooks target them; setups (below) compose them. Convention: underscores name
 # a group, hyphens name a host (#101).
 groups:
-  san_a:  [san-a]
-  san_b:  [san-b]
-  pcmk_a: [pcmk-a1, pcmk-a2, pcmk-a3]
-  pcmk_b: [pcmk-b1, pcmk-b2, pcmk-b3]
   rdqm_a: [rdqm-a1, rdqm-a2, rdqm-a3]
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
   nha_rhel_crr_a: [nha-rhel-crr-a1, nha-rhel-crr-a2, nha-rhel-crr-a3]
   nha_rhel_crr_b: [nha-rhel-crr-b1, nha-rhel-crr-b2, nha-rhel-crr-b3]
   nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2, nha-ubuntu-a3]
   nha_ubuntu_b: [nha-ubuntu-b1, nha-ubuntu-b2, nha-ubuntu-b3]
-  pdrbd_a: [pdrbd-a1, pdrbd-a2, pdrbd-a3]
-  pdrbd_b: [pdrbd-b1, pdrbd-b2, pdrbd-b3]
   svc:   [svc-sim]
   app:    [app-client]
   # obs_box (not "obs") so the group name never collides with the host named obs
@@ -365,7 +265,7 @@ groups:
   # it was consolidated onto the obs node (#1179, epic .github#267), so those services ride
   # the obs_box group. `mqlab logsearch` ad-hoc calls now resolve to the obs host.
 
-# stacks: — canonical 4-stack registry (#350). Each stack is the authoritative
+# stacks: — canonical stack registry (#350). Each stack is the authoritative
 # union of its old arm (mechanism/verbs/short) and its full-HADR distributed setup
 # (groups, qm VIPs, alloc). Added alongside setups:/arms: in Task 1a; cutover
 # (retire setups:/arms:) is Task 1b.
@@ -373,52 +273,12 @@ groups:
 # QM names derive from `short` via #351 short-derivation: <short>APP / <short>SVC.
 # No hardcoded QM literals here — names live exclusively in the short token.
 #
-# groups: lists the full HADR set (site-A + site-B + SANs, in bring-up order) —
+# groups: lists the full HADR set (site-A + site-B, in bring-up order) —
 # the canonical "run the whole stack" shape. Individual phase groups are composed
 # by the playbooks.
 #
 # alloc: port/unit constants referenced by playbooks and the mqweb content plays.
 stacks:
-  pcmk-ubuntu:
-    mechanism: pacemaker-san
-    os_family: ubuntu
-    short: PCMK
-    cluster_group: pcmk_a
-    groups: [san_a, pcmk_a, san_b, pcmk_b]
-    # DR (site-B) groups skipped by `bootstrap --no-dr` (#188). Option B (#997): only
-    # pcmk_b — the 3 heavy DR cluster nodes, the dominant footprint cost — is dropped;
-    # san_b stays UP so the san_a→san_b HA DRBD pair keeps its unchanged two-peer
-    # `--clear-bitmap` bring-up (no single-peer-DRBD surgery on the HA building block).
-    # Deliberate, approved deviation from the epic's "no DR replication" criterion: the
-    # cross-site DRBD mirror keeps running under --no-dr, traded for that simplicity.
-    dr_groups: [pcmk_b]
-    provision: ansible/site-pcmk.yml
-    secrets: [pcmk_hacluster_password, mqweb_aes_passphrase]
-    qm: { vip: 10.10.1.200, vip_b: 10.10.2.200, vip_ext: 10.60.0.10, vip_ext_b: 10.60.0.20 }
-    alloc: { exporter_app_port: 9157, app_unit: app-pcmk, svc_port: 1414 }
-    verbs:
-      qm-create:  { playbook: site-pcmk.yml }
-      qm-destroy: { playbook: site-pcmk-qm-down.yml }
-      # --wait=n (#1640): without it pcs only sets target-role and returns at once, so
-      # a stop or start that then failed was never reported. With it pcs waits up to n s
-      # and exits 1 unless mq_group is Stopped/Started. n = the group's ops run in series:
-      # mq-pcmk-qmgr sets no stop/start timeouts, so pcs copies the agents' metadata
-      # defaults (pcs 0.9.160+): systemd mq_qm 100 s + Filesystem mq_fs 60 s + IPaddr2
-      # mq_vip, mq_vip_ext 20 s each = 200 s either way, plus 40 s for the scheduler and
-      # pcs's settle poll. pcs 0.12 deprecates --wait for `pcs status wait` + `pcs status
-      # query resource`, but pcs 0.11.7 (Ubuntu 24.04) has neither, so --wait stays.
-      qm-up:      { pcs: "resource enable --wait=240 mq_group" }
-      qm-down:    { pcs: "resource disable --wait=240 mq_group" }
-      qm-status:  { pcs: "status resources" }
-      # No honest reconnect-restart on this arm (#1514): refused, never faked.
-      qm-reload:
-        refuse: >-
-          Pacemaker owns this queue manager through its mq_qm systemd resource, whose
-          stop is `endmqm -w` (no -r), so a Pacemaker restart never tells clients to
-          reconnect; an `endmqm -r` behind Pacemaker's back is a resource failure that
-          Pacemaker recovers, not a planned restart. IBM documents no reconnect-restart
-          for a Pacemaker-managed queue manager outside RDQM. The verb runs on the rdqm
-          and native-ha stacks.
   rdqm-rhel:
     mechanism: rdqm
     os_family: rhel
@@ -463,7 +323,7 @@ stacks:
   # nativeha-rhel-crr. Identical mechanism/verbs (mqmonitor@ systemd lifecycle, qm.ini
   # GroupRole switchover); only the QM names (NHAU*), the groups (nha_ubuntu_*),
   # the exporter ports/app_unit, and the provision playbook differ. Built to coexist
-  # with pcmk-ubuntu on one host (collision-free IPs/ports).
+  # with the other stacks on one host (collision-free IPs/ports).
   nativeha-ubuntu:
     mechanism: native-ha
     os_family: ubuntu
@@ -484,41 +344,6 @@ stacks:
       dr-cutover:  { playbook: site-nativeha-ubuntu-switchover.yml }
       dr-failback: { playbook: site-nativeha-ubuntu-switchover.yml }
       diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
-  # pcmk-drbd-ubuntu (epic .github#310): RDQM rebuilt from upstream Corosync/Pacemaker/
-  # DRBD 9. Built to RDQM's captured config (docs/reference/rdqm-blueprint/); deviations
-  # in docs/reference/rdqm-vs-vanilla-deviations.md. Like RDQM: one floating IP per site
-  # (no vip_ext), operator-driven DR (no Booth). Full HA+DR by default (#1428): each site
-  # its own cluster + HA resource, the DR resource stacked on it; `--no-dr` builds the
-  # HA-only shape, fixed at QM creation.
-  pcmk-drbd-ubuntu:
-    mechanism: pacemaker-drbd
-    os_family: ubuntu
-    short: PDRBD
-    cluster_group: pdrbd_a
-    groups: [pdrbd_a, pdrbd_b]
-    dr_groups: [pdrbd_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
-    provision: ansible/site-pdrbd.yml
-    secrets: [pcmk_hacluster_password, mqweb_aes_passphrase]
-    qm: { vip: 10.10.1.170, vip_b: 10.10.2.170 }
-    alloc: { exporter_app_port: 9165, app_unit: app-pdrbd, svc_port: 1414 }
-    verbs:
-      qm-create:   { playbook: site-pdrbd.yml }
-      qm-destroy:  { playbook: site-pdrbd-qm-down.yml }
-      # --wait=n (#1640): pcs waits up to n s and exits 1 unless mq_group is Stopped/
-      # Started (see pcmk-ubuntu for why, and why --wait over pcs 0.12's replacement).
-      # n = the group's ops run in series, from pdrbd-qm: mq_qm 300 s + mq_fs 60 s +
-      # mq_vip 20 s (the IPaddr2 metadata default; no --no-default-ops on it) = 380 s
-      # either way, plus 40 s for the scheduler and pcs's settle poll. The DRBD clones
-      # sit outside mq_group, so enable/disable does not move them.
-      qm-up:       { pcs: "resource enable --wait=420 mq_group" }
-      qm-down:     { pcs: "resource disable --wait=420 mq_group" }
-      # drbdadm status all gates (it fails with no resource up) but omits the stacked DR
-      # resource (blueprint README §2.1); drbdsetup status --verbose shows both.
-      qm-status:   { cmd: "pcs status resources && drbdadm status all >/dev/null && drbdsetup status --verbose" }
-      # `mqlab dr` dispatches on these (#1424); rpo0: the playbook seeds + verifies RPO-0.
-      dr-cutover:  { playbook: site-pdrbd-dr-switch.yml, rpo0: true }
-      dr-failback: { playbook: site-pdrbd-dr-switch.yml, rpo0: true }
-      diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
 
 # svc: — the single shared Business-B counterparty (#446). One SVCQM on svc-sim;
 # each app stack owns its own {SHORT}.SVC.REQUEST queue + responder for independence.
@@ -527,7 +352,7 @@ svc:
   short: SVC
   conn: 10.60.0.50        # inter-business WAN CONNAME (was the per-stack qm.svc_conn)
   listener_port: 1414
-  exporter_port: 9158     # the one shared svc exporter port (freed from pcmk's slot)
+  exporter_port: 9158     # the one shared svc exporter port
 
 # commons: — shared observability stack. Replaces the old `monitoring` setup in the
 # stacks namespace; the `monitoring` setup entry above remains intact until Task 1b.

@@ -142,22 +142,22 @@ def test_lab_secret_writes_into_the_shared_state_bucket(tmp_path: Path):
     state = tmp_path / "repo" / "build" / "state"
     state.mkdir(parents=True)
     env = _env(tmp_path, MQLAB_STATE_DIR=str(state))
-    first = _secret(checkout, "pcmk_hacluster_password", env)
+    first = _secret(checkout, "mqweb_aes_passphrase", env)
     assert first.returncode == 0, first.stderr
-    stored = state / "secrets" / "pcmk_hacluster_password"
+    stored = state / "secrets" / "mqweb_aes_passphrase"
     assert stored.read_text() == first.stdout
     assert len(first.stdout.strip()) == 32
     assert stat.S_IMODE((state / "secrets").stat().st_mode) == 0o700
     assert stat.S_IMODE(stored.stat().st_mode) == 0o600
     # Idempotent: the same value forever after.
-    assert _secret(checkout, "pcmk_hacluster_password", env).stdout == first.stdout
+    assert _secret(checkout, "mqweb_aes_passphrase", env).stdout == first.stdout
     # And nothing was created beside the script (the #1569 fork).
     assert not (checkout / "build").exists()
 
 
 def test_lab_secret_refuses_without_a_resolvable_bucket(tmp_path: Path):
     checkout = _fake_checkout(tmp_path)
-    result = _secret(checkout, "pcmk_hacluster_password", _env(tmp_path))
+    result = _secret(checkout, "mqweb_aes_passphrase", _env(tmp_path))
     assert result.returncode == 1
     assert "MQLAB_STATE_DIR is unset" in result.stderr
     assert result.stdout == ""
@@ -168,7 +168,7 @@ def test_lab_secret_refuses_a_missing_state_bucket(tmp_path: Path):
     checkout = _fake_checkout(tmp_path)
     absent = tmp_path / "repo" / "build" / "state"
     env = _env(tmp_path, MQLAB_STATE_DIR=str(absent))
-    result = _secret(checkout, "pcmk_hacluster_password", env)
+    result = _secret(checkout, "mqweb_aes_passphrase", env)
     assert result.returncode == 1
     assert "does not exist" in result.stderr
     assert not absent.exists()
