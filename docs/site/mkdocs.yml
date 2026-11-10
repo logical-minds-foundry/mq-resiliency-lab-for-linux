@@ -6,10 +6,6 @@ docs_dir: docs
 strict: true
 edit_uri: ""
 
-extra:
-  version:
-    provider: mike
-
 extra_javascript:
   - js/resize-iframes.js
 
