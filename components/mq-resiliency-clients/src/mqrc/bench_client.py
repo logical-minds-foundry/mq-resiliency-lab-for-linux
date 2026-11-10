@@ -2,7 +2,7 @@
 
 Native HA ONLY (#1380): it targets a Native HA app QM (NHARCAPP / NHARIAPP) and
 PUTs persistent messages to APP.REPLY on it. The deployer renders the `mq-bench`
-wrapper for Native HA stacks only; RDQM/Pacemaker are not benchmark targets.
+wrapper for Native HA stacks only; RDQM is not a benchmark target.
 
 Measures the *sync tax* of persistent-message commits: the cost strict-sync
 IRR (`SyncConsistency=Strict`) puts on the critical path of every commit vs
@@ -56,10 +56,8 @@ publish_metrics = app_requester.publish_metrics
 _is_reconnectable = app_requester._is_reconnectable
 
 # Default target: the CRR app QM. The sweep overrides --qm per mode
-# (NHARCAPP for async CRR, NHARIAPP for strict IRR). Kept in sync with
-# app_requester's env fallback.
+# (NHARCAPP for async CRR, NHARIAPP for strict IRR).
 DEFAULT_QM = os.environ.get("MQLAB_QM", "NHARCAPP")
-DEFAULT_CONN = app_requester.DEFAULT_CONN
 
 # MQ reasons that mean the QM could not be reached or the connection is dead: the
 # dead-connection set app_requester reconnects on, plus the connect-time "nothing
@@ -220,7 +218,7 @@ def _build_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument(
         "--qm", default=DEFAULT_QM, help="target queue manager (e.g. NHARCAPP | NHARIAPP)"
     )
-    ap.add_argument("--conn", default=DEFAULT_CONN, help="CONNAME list for the client connection")
+    ap.add_argument("--conn", required=True, help="CONNAME list for the client connection")
     ap.add_argument("--channel", default="APP.SVRCONN")
     ap.add_argument(
         "--queue", default="APP.REPLY", help="local queue to PUT persistent messages to"

@@ -192,7 +192,7 @@ def _run(args, ledger, deadline):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM_SVC", "PCMKSVC"))
+    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM_SVC", "SVCQM"))
     ap.add_argument("--conn", default="localhost(1414)")
     ap.add_argument("--channel", default="SVC.SVRCONN")
     ap.add_argument("--in-queue", default="SVC.REQUEST")

@@ -13,6 +13,8 @@ import json
 import sys
 import types
 
+import pytest
+
 from mqrc import bench_client as bc
 
 # --- percentile math -------------------------------------------------------
@@ -151,7 +153,7 @@ def test_append_jsonl_creates_parent_dir(tmp_path):
 
 
 def test_default_args_are_the_bench_contract():
-    args = bc._build_args([])
+    args = bc._build_args(["--conn", "nhar-a(1414)"])
     # persistent-message bench defaults per the epic's aligned numbers.
     assert args.msg_size == 2048
     assert args.warmup_seconds == 30
@@ -163,12 +165,22 @@ def test_default_args_are_the_bench_contract():
 
 def test_args_parse_the_sweep_point():
     args = bc._build_args(
-        ["--qm", "NHARIAPP", "--mode", "strict", "--delay-ms", "20", "--offered-rate", "750"]
+        [
+            *("--qm", "NHARIAPP", "--conn", "nhar-a(1414)", "--mode", "strict"),
+            *("--delay-ms", "20", "--offered-rate", "750"),
+        ]
     )
     assert args.qm == "NHARIAPP"
     assert args.mode == "strict"
     assert args.delay_ms == 20
     assert args.offered_rate == 750.0
+
+
+def test_omitting_conn_fails(capsys):
+    with pytest.raises(SystemExit) as exc:
+        bc._build_args(["--qm", "NHARCAPP"])
+    assert exc.value.code == 2
+    assert "--conn" in capsys.readouterr().err
 
 
 # --- reuse of app_requester's isolated pieces ------------------------------
@@ -305,7 +317,7 @@ def _fake_ibmmq(*, put_reason: int = 0, connect_reason: int = 0) -> types.Module
     return m
 
 
-_RUN_ARGS = ["--warmup-seconds", "0", "--count", "3", "--qm", "NHARCAPP"]
+_RUN_ARGS = ["--warmup-seconds", "0", "--count", "3", "--qm", "NHARCAPP", "--conn", "x(1414)"]
 
 
 def test_run_put_2035_reports_not_authorized(monkeypatch, capsys):

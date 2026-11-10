@@ -112,7 +112,7 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
 def _args(argv_extra: list[str]) -> object:
     base = [
         "--qmgr",
-        "PCMKAPP",
+        "NHAUAPP",
         "--conn",
         "h(1414)",
         "--channel",
@@ -210,7 +210,7 @@ def test_main_returns_zero_only_when_observed_matches_expect(monkeypatch, capsys
 def _argv_expect(expect: int) -> list[str]:
     return [
         "--qmgr",
-        "PCMKAPP",
+        "NHAUAPP",
         "--conn",
         "h(1414)",
         "--channel",

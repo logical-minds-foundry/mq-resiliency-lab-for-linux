@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     import ibmmq
 
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--qm", default="PCMKSVC")
+    ap.add_argument("--qm", required=True, help="SVC queue manager name, e.g. SVCQM")
     ap.add_argument("--in-queue", default="SVC.REQUEST")
     ap.add_argument("--channel", default="SVC.SVRCONN")
     ap.add_argument("--conn", default="localhost(1414)")

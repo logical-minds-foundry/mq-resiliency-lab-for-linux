@@ -33,10 +33,6 @@ from mqrc.mqconn import connect_client
 # for a lab round-trip: sub-ms replies up to multi-second queuing under a burst.
 _BUCKETS_MS: tuple[float, ...] = (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000)
 
-# Both site VIPs by default (site-A floats within DC-A for HA; site-B is the DR
-# endpoint). A per-stack service overrides --conn with that stack's app-QM address.
-DEFAULT_CONN = "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
-
 _TEXTFILE_HELP = (
     ("app_roundtrip_total", "counter", "Total app round-trips attempted."),
     ("app_roundtrip_failures_total", "counter", "App round-trips that failed (no reply / error)."),
@@ -172,8 +168,10 @@ def publish_metrics(path: str, stats: RoundTripStats) -> None:
 
 def _build_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "PCMKAPP"))
-    ap.add_argument("--conn", default=DEFAULT_CONN)
+    # --qm and --conn have no default: each stack's unit passes its own app QM and
+    # CONNAME list (the VIPs or the Native HA instance list).
+    ap.add_argument("--qm", required=True, help="app queue manager name")
+    ap.add_argument("--conn", required=True, help="CONNAME list for the client connection")
     ap.add_argument("--channel", default="APP.SVRCONN")
     ap.add_argument("--request-queue", default="SVC.REQUEST")
     ap.add_argument("--reply-queue", default="APP.REPLY")

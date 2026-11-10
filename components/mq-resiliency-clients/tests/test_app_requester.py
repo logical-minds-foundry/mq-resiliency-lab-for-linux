@@ -145,11 +145,25 @@ def test_publish_metrics_survives_a_write_failure_but_shouts(monkeypatch, capsys
     assert "FAILED" in out and "Permission denied" in out  # loud, never swallowed
 
 
+_TARGET = ["--qm", "NHAUAPP", "--conn", "nhau-a(1414)"]
+
+
 def test_default_args_stream_forever_at_one_per_second():
-    args = ar._build_args([])
+    args = ar._build_args(_TARGET)
     assert args.count == 0  # 0 == infinite (the service default)
     assert args.rate == 1.0
     assert args.textfile == ""  # metrics off unless a path is given
+
+
+@pytest.mark.parametrize(
+    ("argv", "missing"),
+    [(["--conn", "nhau-a(1414)"], "--qm"), (["--qm", "NHAUAPP"], "--conn")],
+)
+def test_omitting_a_target_argument_fails(argv, missing, capsys):
+    with pytest.raises(SystemExit) as exc:
+        ar._build_args(argv)
+    assert exc.value.code == 2
+    assert missing in capsys.readouterr().err
 
 
 # --- reconnect across a connection break (#457) ----------------------------
@@ -247,7 +261,7 @@ def test_requester_reconnects_after_a_connection_break(monkeypatch, capsys):
     # the old code looped the dead handle forever (one connect, all failures). (#457)
     state = {"alive": False, "connects": 0, "gets": 0, "break_at": 1}
     monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq(state))
-    rc = ar.run(ar._build_args(["--count", "3", "--rate", "0"]))
+    rc = ar.run(ar._build_args([*_TARGET, "--count", "3", "--rate", "0"]))
     out = capsys.readouterr().out
     assert state["connects"] == 2  # initial + exactly one reconnect
     assert state["opts"] == [0x400000 | 0x800] * 2  # RECONNECT + CLIENT_BINDING (#1480)
@@ -263,7 +277,7 @@ def test_requester_retries_when_the_reconnect_itself_fails(monkeypatch, capsys):
     # and keeps attempting to reconnect. (#457)
     state = {"alive": False, "connects": 0, "gets": 0, "break_at": -1}
     monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq(state, revive_on_connect=False))
-    rc = ar.run(ar._build_args(["--count", "3", "--rate", "0"]))
+    rc = ar.run(ar._build_args([*_TARGET, "--count", "3", "--rate", "0"]))
     out = capsys.readouterr().out
     assert state["connects"] == 3  # one reconnect attempt per iteration, no crash
     assert out.count("round-trip FAILED") == 3

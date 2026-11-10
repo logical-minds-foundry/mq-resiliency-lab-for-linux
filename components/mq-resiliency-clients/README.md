@@ -74,7 +74,7 @@ MsgId (#1549). Every put site builds a fresh `ibmmq.MD(...)` and also sets
 `mq-bench` is a **Native HA** persistent-commit benchmark: it measures the commit cost of
 Native HA replication (async CRR vs strict IRR) by PUTting persistent messages to
 `APP.REPLY` on a Native HA app QM (`NHARCAPP` / `NHARIAPP`). It is not a benchmark for
-RDQM or Pacemaker stacks, so the deployer renders its `/home/vagrant/mq-bench` wrapper
+RDQM, so the deployer renders its `/home/vagrant/mq-bench` wrapper
 only when it provisions a Native HA stack. When a run produces no commits, it reports
 the MQ reason codes it saw. It says "QM unreachable" only when every failure was a
 connection failure; for example, 2035 `MQRC_NOT_AUTHORIZED` is reported as a refusal.
