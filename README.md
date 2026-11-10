@@ -36,7 +36,8 @@ it, then reproduce it by hand. The lab is transparent evidence, not a black box.
 The author *develops* the lab inside a personal
 [Vergil](https://github.com/vergil-project) dev VM, but Vergil only provides that
 dev environment — strip it away and what remains is exactly `mqlab` and its
-support tree, which is what you clone and run on your own host. See [Developing with Vergil](#developing-with-vergil) below.
+support tree, which is what you clone and run on your own host. See
+[Developing with Vergil](#developing-with-vergil) below.
 
 ## Getting Started
 

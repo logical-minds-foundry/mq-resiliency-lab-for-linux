@@ -48,7 +48,8 @@ releases, and `develop` is the lab.
 That is the entire product. The author *develops* the lab inside a personal
 [Vergil](https://github.com/vergil-project) dev VM, but **Vergil only provides
 that dev environment** — strip it away and what remains is `mqlab` and its
-support tree, which is exactly what you clone and run on your own host. (If you *are* a Vergil user, see [Develop the lab](develop.md).)
+support tree, which is exactly what you clone and run on your own host. (If you
+*are* a Vergil user, see [Develop the lab](develop.md).)
 
 ## Start here
 
