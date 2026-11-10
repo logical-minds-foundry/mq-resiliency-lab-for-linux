@@ -6,7 +6,7 @@
 # silently-blank version would corrupt the report corpus (no silent failures).
 # A final localhost play merges every host's `gathered` dict into build/work/versions.json.
 
-- hosts: pcmk_a:rdqm_a # QM + HA nodes (ubuntu apt OR rhel bundled — same probes)
+- hosts: rdqm_a # QM + HA nodes (rhel bundled)
   gather_facts: false
   tasks:
     - name: mq
