@@ -3104,7 +3104,7 @@ def _bootstrap_run(
         # its roles read e.g. MQWEB_AES_PASSPHRASE via lookup('env', ...). The I/O
         # (lab-secret.sh) lives here in the sequencer, not in pure phases.py — mirrors
         # os.environ.update(_vagrant_env()). The #350 cutover dropped this with the old
-        # `vm provision`; without it the hacluster password is empty and chpasswd fails.
+        # `vm provision`; without it the secrets reach the roles empty and they fail loud.
         if any(phase.name == "provision" for phase in selected):
             os.environ.update(_stack_provision_env(deps, stack))
         # Once-per-run prereq kinds already ensured this run (#1248): provision and
