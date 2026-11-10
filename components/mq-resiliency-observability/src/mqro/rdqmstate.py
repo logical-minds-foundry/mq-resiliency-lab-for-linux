@@ -327,7 +327,7 @@ def render_rdqm_state_prom(
 
 def _commands(qm: str) -> dict[str, tuple[list[str], int]]:
     """source -> (argv, timeout). rdqmstatus + drbdsetup + crm_mon all run as root (the unit
-    runs as root, like cluster-state); timeouts are well under the 5s tick."""
+    runs as root); timeouts are well under the 5s tick."""
     return {
         "rdqmstatus": (["/opt/mqm/bin/rdqmstatus", "-m", qm], 3),
         "drbd": (["drbdsetup", "status", "--verbose", "--statistics"], 2),

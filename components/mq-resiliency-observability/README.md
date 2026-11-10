@@ -12,7 +12,6 @@ No third-party runtime dependencies.
 
 | Entry point | Module | Writes |
 |---|---|---|
-| `lab-cluster-state --role {cluster,storage}` | `mqro.clusterstate` | `lab_cluster_state.prom` (Pacemaker + DRBD) |
 | `lab-nativeha-state --qm <QM>` | `mqro.nativehastate` | `lab_nativeha_state.prom` (Native HA / CRR) |
 | `lab-loglifecycle-state --qm <QM>` | `mqro.loglifecycle` | `lab_loglifecycle_state.prom` (Native HA log health) |
 | `lab-rdqm-state --qm <QM>` | `mqro.rdqmstate` | `lab_rdqm_state.prom` (RDQM HA / DR / DRBD) |
@@ -35,7 +34,6 @@ The units in `systemd/` are static and install to `/usr/lib/systemd/system/`. Ea
 
 | Unit | Environment file | Keys |
 |---|---|---|
-| `lab-cluster-state.{service,timer}` | `lab-cluster-state.env` | `ROLE` (`cluster` or `storage`) |
 | `lab-nativeha-state.{service,timer}` | `lab-nativeha-state.env` | `QM` (runs both `lab-nativeha-state` and `lab-loglifecycle-state`) |
 | `lab-rdqm-state.{service,timer}` | `lab-rdqm-state.env` | `QM` |
 
