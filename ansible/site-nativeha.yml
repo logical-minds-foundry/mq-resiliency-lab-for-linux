@@ -137,7 +137,7 @@
         nha_steps:
           - label: runmqsc mqoperator grants
             cmd: /opt/mqm/bin/runmqsc {{ qm_name }}
-            stdin: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/roles/mq-pcmk-qmgr/templates/mqoperator.mqsc.j2') }}"
+            stdin: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/templates/mq/mqoperator.mqsc.j2') }}"
 
 # HA-site (Live group) TLS keystore — apply it here ONLY when the DR half is skipped
 # (`bootstrap --no-dr`, dr_enabled=false). Site-A TLS is otherwise deployed inside

@@ -113,7 +113,7 @@
     cmd: /opt/mqm/bin/runmqsc {{ qmgr_name }}
     stdin: >-
       {{ lookup('ansible.builtin.template',
-                role_path ~ '/../mq-pcmk-qmgr/templates/mqoperator.mqsc.j2',
+                role_path ~ '/../../templates/mq/mqoperator.mqsc.j2',
                 template_vars={'qm_name': qmgr_name}) }}
   become: true
   become_user: mqm

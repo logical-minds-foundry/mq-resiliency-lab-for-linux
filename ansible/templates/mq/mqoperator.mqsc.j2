@@ -1,0 +1,11 @@
+* mqoperator (MQWebUser) grants for {{ qm_name }} — epic .github#341 spec §2.2 / IBM S15 (#1501).
+* Arm-agnostic; every QM-bearing play applies it once on the running QM (HA/DR replicate it).
+* SET AUTHREC takes effect immediately, so no REFRESH SECURITY is needed. Every line must
+* succeed: the applying task accepts runmqsc rc 0 only, so a refused grant fails loud.
+{% for g in authz_mqoperator_grants %}
+{% if g.objtype == 'QMGR' %}
+SET AUTHREC OBJTYPE(QMGR) GROUP('mqoperator') AUTHADD({{ g.authadd }})
+{% else %}
+SET AUTHREC PROFILE('{{ g.profile }}') OBJTYPE({{ g.objtype }}) GROUP('mqoperator') AUTHADD({{ g.authadd }})
+{% endif %}
+{% endfor %}

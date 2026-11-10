@@ -20,7 +20,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AUTHZ = REPO_ROOT / "ansible" / "group_vars" / "all" / "authz.yml"
-TEMPLATE = REPO_ROOT / "ansible" / "roles" / "mq-pcmk-qmgr" / "templates" / "authz.mqsc.j2"
+TEMPLATE = REPO_ROOT / "ansible" / "templates" / "mq" / "authz.mqsc.j2"
 
 
 def _grants() -> list[dict[str, str]]:

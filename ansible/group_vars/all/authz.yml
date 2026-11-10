@@ -115,7 +115,7 @@ authz_mqmon_grants:
 # authorizes each command as the message's user, so an ALTER from mqoperator is refused by
 # OAM. S15 is written for remote queue managers and IBM documents no separate local-mode
 # minimum (spec §2.2), so the list is applied as written; the live-lab acceptance task proves
-# it. Rendered by roles/mq-pcmk-qmgr/templates/mqoperator.mqsc.j2 and applied on every QM
+# it. Rendered by templates/mq/mqoperator.mqsc.j2 and applied on every QM
 # (#1501). Unlike authz_grants these are MQSC SET AUTHREC, not setmqaut (repo rule).
 authz_mqoperator_grants:
   - { objtype: QMGR, authadd: "CONNECT, DSP" }

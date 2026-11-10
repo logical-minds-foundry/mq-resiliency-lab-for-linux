@@ -161,12 +161,12 @@
                'cmd': '/opt/mqm/bin/runmqsc ' ~ qm_name,
                'ok_rcs': [0, 10],
                'stdin': lookup('ansible.builtin.template',
-                               playbook_dir ~ '/roles/mq-pcmk-qmgr/templates/authz.mqsc.j2')}]
+                               playbook_dir ~ '/templates/mq/authz.mqsc.j2')}]
              + _authz_grant_steps
              + [{'label': 'runmqsc mqoperator grants (MQWebUser, #1501)',
                  'cmd': '/opt/mqm/bin/runmqsc ' ~ qm_name,
                  'stdin': lookup('ansible.builtin.template',
-                                 playbook_dir ~ '/roles/mq-pcmk-qmgr/templates/mqoperator.mqsc.j2')}]
+                                 playbook_dir ~ '/templates/mq/mqoperator.mqsc.j2')}]
              + [{'label': 'runmqsc REFRESH SECURITY TYPE(AUTHSERV)',
                  'cmd': '/opt/mqm/bin/runmqsc ' ~ qm_name,
                  'stdin': 'REFRESH SECURITY TYPE(AUTHSERV)'}] }}
