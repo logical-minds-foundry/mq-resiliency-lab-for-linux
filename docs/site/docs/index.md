@@ -1,14 +1,14 @@
 # MQ Resiliency Lab for Linux
 
-A downloadable, signed lab that stands up **IBM MQ high-availability (HA) and
-disaster-recovery (DR) topologies** end to end — from a bare x86 Linux host down
-to running queue managers and a live message path that survives failover.
+A lab that stands up **IBM MQ high-availability (HA) and disaster-recovery (DR)
+topologies** end to end — from a bare x86 Linux host down to running queue
+managers and a live message path that survives failover.
 
-Download the signed release, verify it, and bring up a full HA/DR stack with a
-single command:
+Clone the repository, run `./scripts/setup`, and bring up a full HA/DR stack with
+a single command:
 
 ```bash
-mqlab bootstrap pcmk-ubuntu
+uv run mqlab bootstrap pcmk-ubuntu
 ```
 
 That one command defines the lab networks, boots the guest fleet, provisions the
@@ -41,19 +41,20 @@ The whole lab is declared as code and rebuilt from scratch on demand. At its
 core is **`mqlab`**, a standalone Python orchestrator, plus its support tree —
 the Ansible roles that provision everything from OS to running queue managers,
 the [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml)
-fleet definition, and the release manifests. Nothing is hand-built; everything
-is repeatable.
+fleet definition, and the manifests. Nothing is hand-built; everything is
+repeatable. You run it from a checkout of the `develop` branch: there are no
+releases, and `develop` is the lab.
 
 That is the entire product. The author *develops* the lab inside a personal
 [Vergil](https://github.com/vergil-project) dev VM, but **Vergil only provides
 that dev environment** — strip it away and what remains is `mqlab` and its
-support tree, which is exactly what the signed release ships and what you run on
-your own host. (If you *are* a Vergil user, see [Develop the lab](develop.md).)
+support tree, which is exactly what you clone and run on your own host. (If you
+*are* a Vergil user, see [Develop the lab](develop.md).)
 
 ## Start here
 
-- **[Getting Started](getting-started.md)** — download, verify, and bring up
-  your first running stack on your own host.
+- **[Getting Started](getting-started.md)** — clone the lab and bring up your
+  first running stack on your own host.
 - **[Methodology](methodology.md)** — why the lab is built the way it is:
   mastering a technology by standing an entire bespoke mini-enterprise up from
   the ground up, virtually.

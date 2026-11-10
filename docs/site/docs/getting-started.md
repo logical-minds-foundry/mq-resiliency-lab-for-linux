@@ -23,63 +23,40 @@ edition, is fetched automatically by the tooling).
   runtime. `uv` provisions and manages its own pinned 3.14 interpreter (the base
   OS Python is left untouched), so you do not install Python yourself.
 - **libvirt / QEMU / Vagrant** — the virtualization stack the guests run on.
-- **gpg** — to verify the signed release below.
+- **git** — to clone the lab.
 - **A RHEL subscription** — only for the RHEL-based arms (RDQM, Native HA on
   RHEL). The canonical `pcmk-ubuntu` arm used throughout this page needs nothing
   extra.
 
-## 2. Download and verify the release
+## 2. Clone the repository
 
-The lab ships as a **signed tarball** from the project's
-[Releases page](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/releases).
-Each release carries four assets: the tarball, its detached signature, a
-`SHA256SUMS`, and a signed `SHA256SUMS.asc`.
-
-Download the tarball and the two checksum files (substitute the version you're
-installing):
+The lab runs from a checkout of the `develop` branch, the repository's only
+branch; there are no releases to download. Clone it and enter the tree:
 
 ```bash
-VERSION=vX.Y.Z
-base=https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/releases/download/$VERSION
-curl -LO $base/mq-resiliency-lab-for-linux-$VERSION.tar.gz
-curl -LO $base/SHA256SUMS
-curl -LO $base/SHA256SUMS.asc
+git clone https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux.git
+cd mq-resiliency-lab-for-linux
 ```
 
-Verify it **before** you unpack. The trust root is the **fingerprint below plus
-a key fetched out-of-band** — not any key bundled in the tarball:
-
-```bash
-gpg --recv-keys 5BABD50A78EBF24D2410AE52ADF1A99B75D24E54     # or import the key from the release page over HTTPS
-gpg --fingerprint 5BABD50A78EBF24D2410AE52ADF1A99B75D24E54   # cross-check it matches the README
-gpg --verify SHA256SUMS.asc SHA256SUMS                       # the checksums are signed by that key
-sha256sum -c SHA256SUMS                                      # the tarball matches the checksums
-```
-
-Once both checks pass, unpack the tarball and enter the tree:
-
-```bash
-tar xzf mq-resiliency-lab-for-linux-$VERSION.tar.gz
-cd mq-resiliency-lab-for-linux-$VERSION
-```
+To pick up later changes, `git pull` and re-run `./scripts/setup`.
 
 ## 3. Set up and pre-flight the host
 
-From inside the extracted tree, build the Python environment and pre-flight the
-host:
+From the checkout, build the Python environment and pre-flight the host:
 
 ```bash
-./scripts/setup     # checks uv + Python 3.14, then runs `uv sync` to build the venv
-. .venv/bin/activate   # put `mqlab` (and its companion tools) on PATH
-mqlab doctor        # pre-flight the host: arch, KVM, libvirt, and required tools
+./scripts/setup         # checks uv + Python 3.14, then runs `uv sync` to build the venv
+uv run mqlab doctor     # pre-flight the host: arch, KVM, libvirt, and required tools
 ```
 
 `./scripts/setup` sets up the **environment**, not the lab: it verifies `uv` and
 a uv-managed Python 3.14 are present — installing 3.14 via `uv` if missing —
 runs `uv sync` to materialize the virtual environment, and prints the next
-commands. It cannot change your shell's `PATH`, so activate the venv once per
-shell. The bare `mqlab` commands on this site assume it is active. (Prefixing
-each command with `uv run`, e.g. `uv run mqlab doctor`, works too.)
+commands. Run the CLI as `uv run mqlab …`: `uv run` puts the venv's `bin/` on
+`PATH`, so the companion tools `mqlab` calls by bare name resolve. Commands on
+this site are written as a bare `mqlab …` for brevity; prefix each with
+`uv run`, or activate the venv once per shell (`. .venv/bin/activate`) and run
+them as written.
 `mqlab doctor` then confirms the host can actually run the guests
 before you commit to a bring-up. Two of its lines are informational and never fail the
 host. `rhel-stacks` says whether the RHEL arms can run here (they need x86_64).
@@ -105,8 +82,8 @@ One command stands up a whole HA/DR stack. The canonical starting arm is
 **`pcmk-ubuntu`** — Pacemaker/SAN on Ubuntu, subscription-free and x86-native:
 
 ```bash
-mqlab bootstrap pcmk-ubuntu   # net → vms → provision → observe, every step streamed
-mqlab status pcmk-ubuntu      # phase completion (✓/✗) for this stack
+uv run mqlab bootstrap pcmk-ubuntu   # net → vms → provision → observe, every step streamed
+uv run mqlab status pcmk-ubuntu      # phase completion (✓/✗) for this stack
 ```
 
 `bootstrap` runs four idempotent phases in order — define the lab networks, boot
@@ -189,7 +166,7 @@ The deep dive below explains what each `mqlab` verb is doing under the hood.
     [Vergil](https://github.com/vergil-project) VM — the author's personal
     solo-practitioner dev tooling — rather than on the host directly. That is a
     development convenience, **not** part of the consumer path: strip Vergil away
-    and what remains is exactly the tree you unpacked above. If you're a Vergil
+    and what remains is exactly the tree you cloned above. If you're a Vergil
     user, [Develop the lab](develop.md) covers the `vrg-vm` workflow.
 
 ## How `mqlab` drives the lab

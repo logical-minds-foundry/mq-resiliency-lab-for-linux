@@ -4,11 +4,12 @@ This file provides guidance to Claude Code when working in this repository.
 
 ## Project overview
 
-mq-resiliency-lab-for-linux is a signed, downloadable lab that stands up IBM MQ
-high-availability and disaster-recovery topologies end to end. Its core is
-`mqlab` (`src/mqlab/`), a Python orchestrator, with the Ansible roles under
-`ansible/` that provision each node. The branching model is `library-release`:
-`develop` integrates, `main` releases.
+mq-resiliency-lab-for-linux is a lab that stands up IBM MQ high-availability and
+disaster-recovery topologies end to end. It runs from a checkout of `develop`:
+clone, `./scripts/setup`, then `uv run mqlab …`; there are no releases. Its core
+is `mqlab` (`src/mqlab/`), a Python orchestrator, with the Ansible roles under
+`ansible/` that provision each node. The branching model is
+`docs-single-branch`: `develop` is the only eternal branch.
 
 ## Development environment
 

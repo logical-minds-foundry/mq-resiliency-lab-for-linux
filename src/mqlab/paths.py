@@ -9,8 +9,8 @@ from pathlib import Path
 def repo_root() -> Path:
     """The repo root — the directory holding pyproject.toml.
 
-    Honors the MQLAB_REPO_ROOT override (set when mqlab runs outside an editable
-    checkout); otherwise walks up from this file.
+    Honors the MQLAB_REPO_ROOT override (a test hook that points mqlab at a
+    scratch tree); otherwise walks up from this file to the checkout's root.
     """
     override = os.environ.get("MQLAB_REPO_ROOT")
     if override:

@@ -1,10 +1,10 @@
 # MQ Resiliency Lab for Linux
 
-A downloadable, signed lab that stands up **IBM MQ high-availability (HA) and
-disaster-recovery (DR) topologies** end to end — from a bare x86 Linux host down
-to running queue managers and a live message path that survives failover. You
-bring a virtualization-capable host; the lab brings everything else, and stands
-up a full HA/DR stack with one command.
+A lab that stands up **IBM MQ high-availability (HA) and disaster-recovery (DR)
+topologies** end to end — from a bare x86 Linux host down to running queue
+managers and a live message path that survives failover. You clone the repository
+onto a virtualization-capable host; the lab brings everything else, and stands up
+a full HA/DR stack with one command.
 
 Full documentation lives in the site under [`docs/site/`](docs/site/docs/) —
 this README is the on-ramp; the site is the depth.
@@ -14,7 +14,7 @@ this README is the on-ramp; the site is the depth.
 - [What this is](#what-this-is)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
-  - [Download and verify the release](#download-and-verify-the-release)
+  - [Clone the repository](#clone-the-repository)
   - [Run it](#run-it)
 - [Developing with Vergil](#developing-with-vergil)
 - [Development](#development)
@@ -24,8 +24,9 @@ this README is the on-ramp; the site is the depth.
 At the core is **`mqlab`**, a standalone Python orchestrator, plus its support
 tree — the Ansible roles that provision everything from OS to running queue
 managers, the [`lab/topology.yaml`](lab/topology.yaml) fleet definition, and the
-release manifests. The deliverable is the **whole tree**, not a Python module:
-you run it from the extracted, signed release.
+manifests. The deliverable is the **whole tree**, not a Python module: you run it
+from a git checkout of the `develop` branch. There are no releases; `develop` is
+the lab.
 
 `mqlab` does the opposite of most tooling — rather than hiding the mechanics, it
 **shows** them. Every command it runs (`virsh`, Ansible, `runmqsc`) is printed
@@ -35,8 +36,8 @@ it, then reproduce it by hand. The lab is transparent evidence, not a black box.
 The author *develops* the lab inside a personal
 [Vergil](https://github.com/vergil-project) dev VM, but Vergil only provides that
 dev environment — strip it away and what remains is exactly `mqlab` and its
-support tree, which is what the signed release ships and what you run on your own
-host. See [Developing with Vergil](#developing-with-vergil) below.
+support tree, which is what you clone and run on your own host. See
+[Developing with Vergil](#developing-with-vergil) below.
 
 ## Getting Started
 
@@ -56,7 +57,7 @@ Almost everything is fetched automatically — IBM **MQ Advanced for Developers*
 - **[uv](https://docs.astral.sh/uv/) and Python 3.14** — the orchestrator's
   runtime (`uv` provisions its own pinned 3.14; the base OS Python is untouched).
 - **libvirt / QEMU / Vagrant** — the virtualization stack the guests run on.
-- **gpg** — to verify the signed release below.
+- **git** — to clone the lab.
 - **A RHEL subscription** — only for the RHEL-based arms (RDQM, Native HA on
   RHEL). The canonical `pcmk-ubuntu` arm needs nothing extra. Both RHEL arms
   default to RHEL 10, which needs an x86-64-v3 CPU (`mqlab doctor` says
@@ -67,59 +68,39 @@ live in one catalog, [`lab/versions.yaml`](lab/versions.yaml); the site's
 [Getting Started](docs/site/docs/getting-started.md#choose-an-os-version) shows
 how to pick one.
 
-### Download and verify the release
+### Clone the repository
 
-The lab ships as a **signed tarball** from the
-[Releases page](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/releases).
-Download the tarball and the two checksum files (substitute the version you're
-installing):
+The lab runs from a checkout of the `develop` branch, the repository's only
+branch. Clone it and enter the tree:
 
 ```bash
-VERSION=vX.Y.Z
-base=https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/releases/download/$VERSION
-curl -LO $base/mq-resiliency-lab-for-linux-$VERSION.tar.gz
-curl -LO $base/SHA256SUMS
-curl -LO $base/SHA256SUMS.asc
+git clone https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux.git
+cd mq-resiliency-lab-for-linux
 ```
 
-Verify it **before** you unpack. The trust root is the **fingerprint below plus
-a key fetched out-of-band** — not any key bundled in the tarball:
-
-```bash
-gpg --recv-keys 5BABD50A78EBF24D2410AE52ADF1A99B75D24E54     # or import the key from the release page over HTTPS
-gpg --fingerprint 5BABD50A78EBF24D2410AE52ADF1A99B75D24E54   # cross-check it matches this README
-gpg --verify SHA256SUMS.asc SHA256SUMS                       # the checksums are signed by that key
-sha256sum -c SHA256SUMS                                      # the tarball matches the checksums
-```
-
-Once both checks pass, unpack the tarball and enter the tree:
-
-```bash
-tar xzf mq-resiliency-lab-for-linux-$VERSION.tar.gz
-cd mq-resiliency-lab-for-linux-$VERSION
-```
+To pick up later changes, `git pull` and re-run `./scripts/setup`.
 
 ### Run it
 
-From inside the extracted tree, build the environment, pre-flight the host, then
-bring up your first stack:
+From the checkout, build the environment, pre-flight the host, then bring up your
+first stack:
 
 ```bash
-./scripts/setup                 # checks uv + Python 3.14, then runs `uv sync` to build the venv
-. .venv/bin/activate            # put `mqlab` (and its companion tools) on PATH
-mqlab doctor                    # pre-flight the host: arch, KVM, libvirt, required tools
-mqlab bootstrap pcmk-ubuntu     # bring up a full HA/DR stack: net → vms → provision → observe
-mqlab status pcmk-ubuntu        # phase completion (✓/✗) for this stack
+./scripts/setup                        # checks uv + Python 3.14, then runs `uv sync` to build the venv
+uv run mqlab doctor                    # pre-flight the host: arch, KVM, libvirt, required tools
+uv run mqlab bootstrap pcmk-ubuntu     # bring up a full HA/DR stack: net → vms → provision → observe
+uv run mqlab status pcmk-ubuntu        # phase completion (✓/✗) for this stack
 ```
 
 `./scripts/setup` sets up the **environment**, not the lab: it verifies `uv` and
 a uv-managed Python 3.14 are present (installing 3.14 via `uv` if missing), runs
-`uv sync` to materialize the
-virtual environment, and prints the next commands. It cannot change your shell's
-`PATH`, so activate the venv (or prefix each command with `uv run`). `mqlab bootstrap pcmk-ubuntu`
-then sequences the whole bring-up — the canonical starting arm is **`pcmk-ubuntu`**
-(Pacemaker/SAN on Ubuntu, subscription-free and x86-native) — and leaves you with
-a **running queue manager**. See
+`uv sync` to materialize the virtual environment, and prints the next commands.
+Run the CLI as `uv run mqlab …`: `uv run` puts the venv's `bin/` on `PATH`, so
+the companion tools `mqlab` calls by bare name resolve. (Activating the venv with
+`. .venv/bin/activate` works too, and then a bare `mqlab …` does.)
+`uv run mqlab bootstrap pcmk-ubuntu` sequences the whole bring-up — the canonical
+starting arm is **`pcmk-ubuntu`** (Pacemaker/SAN on Ubuntu, subscription-free and
+x86-native) — and leaves you with a **running queue manager**. See
 [Getting Started](docs/site/docs/getting-started.md) to send your first message
 and watch it survive a failover.
 
@@ -128,7 +109,7 @@ and watch it survive a failover.
 The lab is *developed* inside an ephemeral [Vergil](https://github.com/vergil-project)
 VM — the author's personal, solo-practitioner dev tooling — rather than on the
 host directly. That is a development convenience, **not** part of the consumer
-path above: strip Vergil away and what remains is exactly the tree you unpacked.
+path above: strip Vergil away and what remains is exactly the tree you cloned.
 It's my own tooling; if you'd find it useful, talk to me.
 
 ## Development
@@ -153,15 +134,14 @@ vrg-vm rebuild logical-minds-foundry/mq-resiliency-lab-for-linux --identity verg
 To change its tooling, edit the `[vm.vergil-user]` profile and rebuild; never
 `apt install` inside a live VM.
 
-From a dev checkout, run the CLI as `uv run mqlab …` rather than calling the
-venv's `mqlab` by its path: `uv run` puts the venv's `bin/` on `PATH`, so the
-tools `mqlab` calls by bare name resolve (see
+Inside the VM, run the CLI as `uv run mqlab …` too, never the venv's `mqlab` by
+its path: `uv run` puts the venv's `bin/` on `PATH`, so the tools `mqlab` calls
+by bare name resolve (see
 [`docs/development/operating-the-lab-from-a-dev-session.md`](docs/development/operating-the-lab-from-a-dev-session.md)).
 
 See [`CLAUDE.md`](CLAUDE.md) for the workflow,
 [`docs/site/docs/develop.md`](docs/site/docs/develop.md) for the developer
-on-ramp, [`docs/development/release-runbook.md`](docs/development/release-runbook.md)
-for cutting a release, and
+on-ramp, and
 [`docs/development/perf-and-staging.md`](docs/development/perf-and-staging.md)
 for comparing bootstrap perf reports across macOS and x86 cloud
 (`mqlab perf diff`, the auto-detected `MQLAB_ENV` profiles, macOS huge pages, and
