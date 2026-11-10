@@ -14,7 +14,7 @@ from __future__ import annotations
 import io
 import os
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import typer
@@ -25,6 +25,9 @@ from mqlab import cli, paths
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 
@@ -184,4 +187,3 @@ def test_vm_provision_env_prints_nothing_when_a_secret_fails(monkeypatch, lab):
     result = CliRunner().invoke(cli.app, ["vm", "provision-env", "nativeha-ubuntu"])
     assert result.exit_code == 2
     assert "export" not in result.stdout
-
