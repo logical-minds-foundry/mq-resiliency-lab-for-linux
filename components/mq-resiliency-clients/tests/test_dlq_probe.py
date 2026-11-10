@@ -14,7 +14,7 @@ import types
 from mqrc import dlq_probe as dp
 
 
-def _make_dlh(reason: int, dest_q: str, dest_qm: str = "PCMKAPP", *, little: bool = True) -> bytes:
+def _make_dlh(reason: int, dest_q: str, dest_qm: str = "NHAUAPP", *, little: bool = True) -> bytes:
     endian = "<" if little else ">"
     buf = b"DLH "
     buf += struct.pack(endian + "i", 2)  # Version
@@ -28,11 +28,11 @@ def _make_dlh(reason: int, dest_q: str, dest_qm: str = "PCMKAPP", *, little: boo
 
 def test_parse_mqdlh_extracts_reason_and_destq_little_endian():
     dlh = dp.parse_mqdlh(_make_dlh(2051, "TESTQ"))
-    assert dlh == {"reason": 2051, "dest_q": "TESTQ", "dest_qm": "PCMKAPP"}
+    assert dlh == {"reason": 2051, "dest_q": "TESTQ", "dest_qm": "NHAUAPP"}
 
 
 def test_parse_mqdlh_extracts_2035_reason():
-    dlh = dp.parse_mqdlh(_make_dlh(2035, "N4.TESTQ", dest_qm="PCMKAPP"))
+    dlh = dp.parse_mqdlh(_make_dlh(2035, "N4.TESTQ", dest_qm="NHAUAPP"))
     assert dlh["reason"] == 2035
     assert dlh["dest_q"] == "N4.TESTQ"
 
@@ -118,7 +118,7 @@ def _args(reason: int, destq: str) -> object:
     return dp._build_args(
         [
             "--qmgr",
-            "PCMKAPP",
+            "NHAUAPP",
             "--conn",
             "h(1414)",
             "--channel",
@@ -180,7 +180,7 @@ def test_main_fail_on_empty_dlq(monkeypatch, capsys):
 def _argv(reason: int, destq: str) -> list[str]:
     return [
         "--qmgr",
-        "PCMKAPP",
+        "NHAUAPP",
         "--conn",
         "h(1414)",
         "--channel",

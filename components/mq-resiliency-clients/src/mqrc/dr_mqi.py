@@ -24,7 +24,7 @@ The reason codes split into two families that demand different handling:
       NON-reconnectably, so a robust client cannot rely on automatic reconnect;
       it must rebuild the connection itself (new MQCONNX to the same QM via its
       connection name, which lands on the survivor once the failover completes).
-      That connection name is the floating VIP for the RDQM/Pacemaker arms, or a
+      That connection name is the floating VIP for the RDQM arm, or a
       multi-instance CONNAME list for the Native HA arm (#246, no VIP) — the
       client tries the list and reconnects to whichever instance is now active.
         2009 MQRC_CONNECTION_BROKEN

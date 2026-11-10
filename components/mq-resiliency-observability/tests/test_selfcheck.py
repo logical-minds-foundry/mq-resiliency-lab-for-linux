@@ -4,7 +4,7 @@ import importlib.metadata
 
 from mqro import selfcheck
 
-COLLECTORS = ("clusterstate", "nativehastate", "rdqmstate", "loglifecycle")
+COLLECTORS = ("nativehastate", "rdqmstate", "loglifecycle")
 
 
 def test_selfcheck_imports_every_module(capsys):
@@ -34,8 +34,8 @@ def test_selfcheck_fails_on_wrong_implementation(monkeypatch, capsys):
 
 
 def test_selfcheck_fails_loud_on_import_error(monkeypatch, capsys):
-    monkeypatch.setattr(selfcheck, "_modules", lambda: ["mqro.clusterstate", "mqro.nope"])
+    monkeypatch.setattr(selfcheck, "_modules", lambda: ["mqro.rdqmstate", "mqro.nope"])
     assert selfcheck.main([]) == 1
     captured = capsys.readouterr()
     assert "FAIL mqro.nope: ModuleNotFoundError" in captured.err
-    assert "ok mqro.clusterstate" in captured.out
+    assert "ok mqro.rdqmstate" in captured.out

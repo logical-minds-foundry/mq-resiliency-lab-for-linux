@@ -191,7 +191,7 @@ def test_reconnect_probe_puts_each_message_with_a_fresh_md(monkeypatch, capsys):
     monkeypatch.setattr(
         reconnect_probe, "connect_client", lambda *_a, **_kw: fake.QueueManager(None)
     )
-    reconnect_probe.probe("PCMKAPP", "vip(1414)", "SVC.REQUEST", puts=2, interval=0)
+    reconnect_probe.probe("NHAUAPP", "vip(1414)", "SVC.REQUEST", puts=2, interval=0)
     _assert_fresh_descriptors(puts, fake)
     for put in puts:
         assert put["correlid_in"] == MQCI_NONE

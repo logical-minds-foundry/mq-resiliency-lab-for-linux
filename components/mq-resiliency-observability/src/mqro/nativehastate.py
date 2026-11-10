@@ -6,7 +6,7 @@ turn `dspmq -o nativeha -x`/`-g` output into rows;
 render_nativeha_state_prom turns rows into a node_exporter textfile; probe() runs each source
 bounded + non-blocking (timeout -> no fresh sample -> the cell reads STALE).
 
-Emits the same cluster_* shape as clusterstate.py (so the clusterboard.py builders and the
+Emits the same cluster_* shape as rdqmstate.py (so the clusterboard.py builders and the
 overview roll-up work unchanged); Native-HA-only facets get cluster_nha_* names (spec §4).
 """
 

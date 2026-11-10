@@ -4,7 +4,7 @@ Connect to a QM with reconnect, put under syncpoint in a loop. While it runs,
 restart the QM externally. If reconnect engages, the puts pause during the
 outage and resume (no fatal error). If not, we see MQRC_CONNECTION_BROKEN/2009.
 
-    mq-reconnect-probe PCMKAPP "pcmk-vip-a.client.com(1414)" SVC.REQUEST
+    mq-reconnect-probe RDQMAPP "10.10.1.100(1414)" SVC.REQUEST
 
 ibmmq is imported lazily inside probe(), so the module imports without the MQ
 client libs present (unit tests, the component selfcheck).

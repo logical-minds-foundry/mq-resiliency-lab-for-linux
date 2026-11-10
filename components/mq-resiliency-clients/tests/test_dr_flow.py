@@ -60,7 +60,8 @@ def _install(monkeypatch, broker: Broker) -> None:
 
 def _run(monkeypatch, tmp_path, broker: Broker, *extra: str) -> int:
     _install(monkeypatch, broker)
-    argv = ["--ledger", str(tmp_path / "app.jsonl"), "--rate", "200", "--seconds", "0.15"]
+    argv = ["--ledger", str(tmp_path / "app.jsonl"), "--conn", "x(1414)", "--rate", "200"]
+    argv += ["--seconds", "0.15"]
     try:
         return dr_flow.main([*argv, *extra])
     finally:
@@ -71,6 +72,13 @@ def _counts(out: str) -> tuple[int, int]:
     match = re.search(r"flow done: (\d+) sent, (\d+) confirmed", out)
     assert match, out
     return int(match.group(1)), int(match.group(2))
+
+
+def test_omitting_conn_fails(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        dr_flow.main(["--ledger", str(tmp_path / "app.jsonl")])
+    assert exc.value.code == 2
+    assert "--conn" in capsys.readouterr().err
 
 
 def test_run_correl_id_is_24_bytes_and_unique_per_run():

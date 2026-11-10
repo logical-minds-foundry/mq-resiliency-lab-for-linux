@@ -26,9 +26,9 @@ only covers abrupt breaks). The producer carries the in-flight message's
 seq/uuid across a rebuild so a failover never drops or silently re-keys it.
 
 Target QM / connection / queues are parameterized so the same client drives any
-arm; it defaults to the Pacemaker arm (PCMKAPP) via its VIP FQDNs, e.g.
-    mq-dr-flow --qm PCMKAPP \
-        --conn "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)" \
+arm. --qm defaults to the nativeha-ubuntu app QM (NHAUAPP); --conn has no default,
+since each arm has its own CONNAME list, e.g.
+    mq-dr-flow --qm RDQMAPP --conn "10.10.1.100(1414)" \
         --req-queue DR.REQUEST --reply-queue DR.REPLY \
         --rate 20 --seconds 30 --ledger ~/dr-ledgers/app.jsonl
 
@@ -268,10 +268,10 @@ def _guarded(name, fn, errors, *args):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    # Defaults target the Pacemaker arm's app QM via its generated VIP FQDNs (#495);
-    # the legacy QMAIN @ 10.30.0.10 single-QM default predated the #351 four-stack model.
-    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "PCMKAPP"))
-    ap.add_argument("--conn", default="pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)")
+    # --qm defaults to the nativeha-ubuntu app QM; --conn is the arm's own CONNAME list
+    # (the RDQM VIP, or a Native HA instance list), so it has no default.
+    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "NHAUAPP"))
+    ap.add_argument("--conn", required=True, help="CONNAME list for the client connection")
     ap.add_argument("--channel", default="APP.SVRCONN")
     ap.add_argument("--req-queue", default="SVC.REQUEST")
     ap.add_argument("--reply-queue", default="APP.REPLY")

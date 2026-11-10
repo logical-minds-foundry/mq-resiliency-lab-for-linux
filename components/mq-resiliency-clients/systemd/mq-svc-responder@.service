@@ -2,7 +2,7 @@
 # deployer-owned EnvironmentFile; never edit this file on a host.
 #
 # Per-stack responder (#446): %i is this stack's request queue on the shared SVC QM
-# (e.g. mq-svc-responder@PCMK.SVC.REQUEST). Each stack gets its own instance so their
+# (e.g. mq-svc-responder@NHAU.SVC.REQUEST). Each stack gets its own instance so their
 # always-on #429 streams stay independent — a stuck responder affects only its stack.
 #
 # Ordering on the SVC QM's own unit (After=/Requires=mq-<QM>.service) names a

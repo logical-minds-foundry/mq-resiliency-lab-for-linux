@@ -1,9 +1,9 @@
 """Host-side FORCED-DR loss analyzer (spec §7, the RPO>0 marquee).
 
 Unlike dr_baseline.py (which asserts RPO 0 for HA), this expects loss: an abrupt
-full-site-A loss after the cross-site DRBD link was broken means every message
-the app committed at A *after* the break never reached san-b, so the forced
-promote of san-b loses exactly that tail. We feed the framework:
+full-site-A loss after the cross-site replication link was broken means every
+message the app committed at A *after* the break never reached site B, so the
+forced promote at site B loses exactly that tail. We feed the framework:
 
   - secondary_present = seqs the app committed BEFORE the replication break
     (everything after the break was on the dead primary only -> gone), plus any
@@ -48,7 +48,7 @@ def main(argv=None):
     sent_ts = _sent_ts(app_path)
 
     # The lost window: committed at A after replication broke, before the primary
-    # died -- on the dead primary only, never shipped to san-b.
+    # died -- on the dead primary only, never shipped to site B.
     lost = {s for s, t in sent_ts.items() if break_ts <= t <= kill_ts}
     secondary_present = set(app.sent_seqs()) - lost
 
@@ -59,12 +59,12 @@ def main(argv=None):
         primary_disk_present=set(),  # full site loss
         cutover_ts=break_ts,
     )
-    report = build_report("DR-FORCE-1", "pcmk-dr", facts, peak_exposure=exposure(app))
+    report = build_report("DR-FORCE-1", "forced-dr", facts, peak_exposure=exposure(app))
     print(report.to_markdown())
     print(
         f"\nFORCED-DR: {len(app.sent_seqs())} sent, "
         f"{len(lost)} committed at A after the replication break "
-        f"(window [{break_ts:.0f},{kill_ts:.0f}]) -> not shipped to san-b -> LOST. "
+        f"(window [{break_ts:.0f},{kill_ts:.0f}]) -> not shipped to site B -> LOST. "
         f"RPO > 0 by construction; the bucket census above attributes it."
     )
     return 0

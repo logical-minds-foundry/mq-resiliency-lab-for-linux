@@ -8,7 +8,6 @@ license = "MIT"
 dependencies = []
 
 [project.scripts]
-lab-cluster-state = "mqro.clusterstate:main"
 lab-nativeha-state = "mqro.nativehastate:main"
 lab-loglifecycle-state = "mqro.loglifecycle:main"
 lab-rdqm-state = "mqro.rdqmstate:main"

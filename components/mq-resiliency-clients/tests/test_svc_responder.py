@@ -13,6 +13,8 @@ import sys
 import time
 import types
 
+import pytest
+
 from mqrc import svc_responder
 
 NO_MSG = 2033  # MQRC_NO_MSG_AVAILABLE
@@ -162,11 +164,19 @@ def _run(monkeypatch, state: dict, *extra: str) -> int:
     return svc_responder.main(argv)
 
 
+def test_omitting_qm_fails(monkeypatch, capsys):
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq({"requests": []}))
+    with pytest.raises(SystemExit) as exc:
+        svc_responder.main(["--in-queue", "SVC.REQUEST", "--seconds", "0.05"])
+    assert exc.value.code == 2
+    assert "--qm" in capsys.readouterr().err
+
+
 def test_replies_to_the_reply_to_queue_with_the_correlation_id(monkeypatch):
-    state: dict = {"requests": [(b"MSGID-1", b"APP.REPLY", b"PCMKAPP", b"hello")]}
+    state: dict = {"requests": [(b"MSGID-1", b"APP.REPLY", b"NHAUAPP", b"hello")]}
     assert _run(monkeypatch, state) == 0
     [(od, md, body, pmo)] = state["replies"]
-    assert (od.ObjectName, od.ObjectQMgrName) == (b"APP.REPLY", b"PCMKAPP")
+    assert (od.ObjectName, od.ObjectQMgrName) == (b"APP.REPLY", b"NHAUAPP")
     assert md.CorrelId == b"MSGID-1"  # reply CorrelId = request MsgId
     assert md.Format == b"MQSTR   "
     assert body == b"REPLY:hello"
