@@ -17,7 +17,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO_ROOT / "ansible"
 AUTHZ = ANSIBLE / "group_vars" / "all" / "authz.yml"
-TEMPLATE = ANSIBLE / "roles" / "mq-pcmk-qmgr" / "templates" / "mqoperator.mqsc.j2"
+TEMPLATE = ANSIBLE / "templates" / "mq" / "mqoperator.mqsc.j2"
 TOPOLOGY = REPO_ROOT / "lab" / "topology.yaml"
 SHARED = ANSIBLE / "site-distributed-shared.yml"
 

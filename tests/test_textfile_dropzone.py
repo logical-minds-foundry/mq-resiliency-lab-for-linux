@@ -32,6 +32,8 @@ _DROPZONE = "/var/lib/node_exporter/textfile"
 # The only roles allowed to manage the drop zone dir (each only as 02775).
 _DIR_MANAGERS = {"node-exporter", "app-requester"}
 _COLLECTOR_ROLES = ("net-reach", "cluster-state", "nativeha-state", "rdqm-state")
+# observability.yml no longer lists cluster-state (#1718); the role itself still exists.
+_OBSERVABILITY_COLLECTORS = ("net-reach", "nativeha-state", "rdqm-state")
 
 
 def _rule() -> list[str]:
@@ -111,7 +113,7 @@ def test_collector_role_asserts_the_dropzone_instead_of_managing_it(role: str):
 def test_node_exporter_runs_before_the_collector_roles_in_observability():
     play = yaml.safe_load((_ANSIBLE / "observability.yml").read_text(encoding="utf-8"))[0]
     names = [r if isinstance(r, str) else r["role"] for r in play["roles"]]
-    for role in _COLLECTOR_ROLES:
+    for role in _OBSERVABILITY_COLLECTORS:
         assert names.index("node-exporter") < names.index(role), role
 
 

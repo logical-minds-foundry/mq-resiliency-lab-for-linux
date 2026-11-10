@@ -390,7 +390,7 @@
 
     - name: render the authorization MQSC (CHLAUTH + maps) on the active node
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/roles/mq-pcmk-qmgr/templates/authz.mqsc.j2"
+        src: "{{ playbook_dir }}/templates/mq/authz.mqsc.j2"
         dest: /var/mqm/authz.mqsc
         owner: mqm
         group: mqm
@@ -435,7 +435,7 @@
     # replicates the OAM records to the DR peer with the rest of the QM over DRBD.
     - name: render the mqoperator grants MQSC on the active node
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/roles/mq-pcmk-qmgr/templates/mqoperator.mqsc.j2"
+        src: "{{ playbook_dir }}/templates/mq/mqoperator.mqsc.j2"
         dest: /var/mqm/mqoperator.mqsc
         owner: mqm
         group: mqm

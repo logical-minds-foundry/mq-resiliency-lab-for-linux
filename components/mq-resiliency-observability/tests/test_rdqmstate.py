@@ -272,10 +272,8 @@ def test_render_unknown_role_and_absent_optional_blocks():
 
 
 def test_render_projects_both_drbd_resources():
-    # reuse clusterstate.parse_drbd verbatim for the HA (qmrdqm) + DR (qmrdqm.dr) resources
-    from mqro.clusterstate import parse_drbd
-
-    drbd = parse_drbd((FIXTURES / "drbdsetup_status.txt").read_text())
+    # parse_drbd projects the HA (qmrdqm) + DR (qmrdqm.dr) resources
+    drbd = rdqmstate.parse_drbd((FIXTURES / "drbdsetup_status.txt").read_text())
     out = rdqmstate.render_rdqm_state_prom(
         node="rdqm-a1", qm="QMRDQM", status=None, drbd=drbd, now=1, fresh_sources=("drbd",)
     )
@@ -538,3 +536,40 @@ def test_main_defaults_node_to_hostname_and_now_to_clock(tmp_path, monkeypatch):
     assert (
         'cluster_state_last_write_timestamp{node="rdqm-a1",source="rdqmstatus"} 1781455999' in text
     )
+
+
+def test_parse_drbd_extracts_role_disk_conn_and_rpo_tail():
+    # the real `drbdsetup status --verbose --statistics` capture (healthy, in-sync)
+    out = rdqmstate.parse_drbd((FIXTURES / "drbd_status.txt").read_text())
+    mqlun = out["mqlun"]
+    assert mqlun["role"] == "Primary"
+    assert mqlun["disk"] == "UpToDate"
+    assert mqlun["conn"] == "Connected"
+    assert mqlun["resync_pct"] == 100.0  # in-sync: no done: token
+    assert mqlun["out_of_sync_bytes"] == 0
+
+
+def test_parse_drbd_resync_tail_reads_done_and_out_of_sync():
+    text = (
+        "mqlun role:Primary suspended:no\n"
+        "  volume:0 minor:0 disk:UpToDate\n"
+        "  peer connection:Connected role:Secondary congested:no\n"
+        "    volume:0 replication:SyncSource peer-disk:Inconsistent done:42.20\n"
+        "        received:0 sent:99 out-of-sync:2202010 pending:0 unacked:0\n"
+    )
+    mqlun = rdqmstate.parse_drbd(text)["mqlun"]
+    assert mqlun["resync_pct"] == 42.20
+    assert mqlun["out_of_sync_bytes"] == 2202010
+    assert mqlun["conn"] == "Connected"
+
+
+def test_parse_drbd_flags_standalone_split_brain():
+    text = (
+        "mqlun role:Secondary suspended:no\n"
+        "  volume:0 minor:0 disk:Outdated\n"
+        "  peer connection:StandAlone role:Unknown congested:no\n"
+    )
+    mqlun = rdqmstate.parse_drbd(text)["mqlun"]
+    assert mqlun["conn"] == "StandAlone"  # the integrity-light trigger
+    assert mqlun["disk"] == "Outdated"
+    assert mqlun["resync_pct"] == 100.0  # no done: while disconnected

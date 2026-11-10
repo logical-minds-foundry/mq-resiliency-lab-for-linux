@@ -1,6 +1,6 @@
 """RDQM cluster-state collector for the lab-rdqm-rhel-cluster cockpit (#287).
 
-Stdlib-only (apart from reusing clusterstate.parse_drbd); installed on the rdqm nodes as
+Stdlib-only; installed on the rdqm nodes as
 the `lab-rdqm-state` console-script entry point of mq-resiliency-observability and run by
 a 5s systemd timer. Pure parse functions turn
 `rdqmstatus -m <qm>` / `drbdsetup status` output into rows; render_rdqm_state_prom turns
@@ -9,9 +9,10 @@ rows into a node_exporter textfile; probe() runs each source bounded + non-block
 
 RDQM owns Pacemaker + DRBD behind rdqmadm, so the collector probes the RDQM-native
 `rdqmstatus` (not crm_mon) plus `drbdsetup status` for the replicated volumes. It emits
-the same cluster_* shape as clusterstate.py / nativehastate.py (so the clusterboard.py
+the same cluster_* shape as nativehastate.py (so the clusterboard.py
 builders and the overview roll-up work unchanged); RDQM-only facets get cluster_rdqm_*
-names (spec §4). The DRBD projection REUSES clusterstate.parse_drbd verbatim.
+names (spec §4). parse_drbd projects the `drbdsetup status` output of the replicated
+volumes.
 """
 
 from __future__ import annotations
@@ -23,8 +24,6 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-
-from mqro.clusterstate import parse_drbd
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -59,6 +58,47 @@ _LOCAL_FIELDS = {
     "DR role": "dr_role",
     "DR status": "dr_status",
 }
+
+
+def parse_drbd(text: str) -> dict[str, Any]:
+    """Parse `drbdsetup status --verbose --statistics` into
+    {resource: {role,disk,conn,resync_pct,out_of_sync_bytes}}.
+
+    Output is whitespace-indented `key:value` tokens::
+
+        mqlun role:Primary suspended:no
+          volume:0 minor:0 disk:UpToDate
+          peer connection:Connected role:Secondary congested:no
+            volume:0 replication:Established peer-disk:UpToDate ... done:73.2
+                received:0 sent:65712 out-of-sync:0 ...
+
+    `--json` is NOT used: this image's drbdsetup rejects it (#272). A resource
+    block starts at column 0 (`<name> role:...`); indented lines refine it. The
+    connection state (Connected/StandAlone/...) drives the integrity light; an
+    in-sync resource has no `done:` token, so resync reads 100%.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    cur: dict[str, Any] = {}
+    for raw in text.splitlines():
+        tokens = dict(t.split(":", 1) for t in raw.split() if ":" in t)
+        if raw[:1] not in ("", " ", "\t") and "role" in tokens:
+            cur = {
+                "role": tokens["role"],
+                "disk": "Unknown",
+                "conn": "Unknown",
+                "resync_pct": 100.0,
+                "out_of_sync_bytes": 0,
+            }
+            out[raw.split()[0]] = cur
+        if "disk" in tokens:  # local volume line (the peer line uses peer-disk:)
+            cur["disk"] = tokens["disk"]
+        if "connection" in tokens:  # peer line: Connected / StandAlone / ...
+            cur["conn"] = tokens["connection"]
+        if "done" in tokens:  # present only while resyncing
+            cur["resync_pct"] = float(tokens["done"])
+        if "out-of-sync" in tokens:
+            cur["out_of_sync_bytes"] = int(tokens["out-of-sync"])
+    return out
 
 
 def rdqm_resource_base(qm: str) -> str:

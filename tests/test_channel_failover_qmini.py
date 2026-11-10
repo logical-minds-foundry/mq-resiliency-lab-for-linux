@@ -101,7 +101,9 @@ CHANNEL_LINE = re.compile(r"(DEFINE|ALTER) CHANNEL\([^)]*\) CHLTYPE\((SDR|RCVR)\
 
 
 def _channel_lines() -> list[tuple[str, str]]:
-    sources = [*ANSIBLE.glob("*.yml"), *ANSIBLE.glob("roles/*/templates/*.j2")]
+    globs = ("*.yml", "roles/*/templates/*.j2", "templates/mq/*.j2")
+    # A role's template symlink into templates/mq/ is the same file: count it once.
+    sources = [path for g in globs for path in ANSIBLE.glob(g) if not path.is_symlink()]
     return [
         (str(path.relative_to(ANSIBLE)), line)
         for path in sources
@@ -122,7 +124,7 @@ def test_every_inter_qm_sdr_and_rcvr_sets_the_shared_hbint() -> None:
         "site-nativeha.yml",
         "site-nativeha-ubuntu.yml",
         "roles/mq-inter-qm/templates/their-side.mqsc.j2",
-        "roles/mq-pcmk-qmgr/templates/inter-qm.mqsc.j2",
+        "templates/mq/inter-qm.mqsc.j2",
         "roles/rdqm-app-tls/templates/app-tls.mqsc.j2",
     }
     assert len(lines) == 10  # an SDR and a RCVR at each of the five sites
