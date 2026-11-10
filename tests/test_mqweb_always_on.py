@@ -48,7 +48,7 @@ STACK_PLAYS = {
 # purpose: test_pending_provision_playbooks_are_still_absent fails the moment the
 # playbook lands, which forces its removal here and puts it under the guards below
 # (the same pattern as tests/test_mqweb_operator_authz.py).
-# Empty since #1427 landed ansible/site-pdrbd.yml (pcmk-drbd-ubuntu).
+# Empty: every declared stack's provision playbook has landed.
 PENDING_PROVISION: set[str] = set()
 
 _ROLE_VERBS = (
@@ -168,7 +168,7 @@ def test_every_stack_provision_reaches_an_mqweb_play() -> None:
     # Every bootstrappable stack runs mqweb on its QM nodes, and its svc-sim import
     # runs it on SVCQM through mq-qmgr.
     playbooks = _provision_playbooks()
-    assert len(playbooks) >= 4, "stack discovery regressed"
+    assert len(playbooks) >= 3, "stack discovery regressed"
     for pb in sorted(playbooks):
         reached = _imports(pb)
         assert {p.name for p in reached} & STACK_PLAYS, f"{pb.name} runs no mqweb play"

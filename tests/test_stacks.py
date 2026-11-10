@@ -28,28 +28,26 @@ X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False, x86
 
 def test_qmconfig_derives_app_svc_and_channel_pair() -> None:
     # svc is the single shared counterparty (SVCQM), not a per-stack {short}SVC (#446)
-    qm = QmConfig(
-        name="PCMKAPP", short="PCMK", vip="10.10.1.200", vip_ext="10.60.0.10", svc="SVCQM"
-    )
-    assert qm.qm_app == "PCMKAPP"
+    qm = QmConfig(name="RDQMAPP", short="RDQM", vip="10.10.1.100", svc="SVCQM")
+    assert qm.qm_app == "RDQMAPP"
     assert qm.qm_svc == "SVCQM"
-    assert qm.chl_to_svc == "PCMKAPP.SVCQM"
-    assert qm.chl_to_app == "SVCQM.PCMKAPP"
+    assert qm.chl_to_svc == "RDQMAPP.SVCQM"
+    assert qm.chl_to_app == "SVCQM.RDQMAPP"
 
 
 def test_qmconfig_svc_defaults_empty() -> None:
-    qm = QmConfig(name="PCMKAPP")
+    qm = QmConfig(name="RDQMAPP")
     assert qm.svc == ""  # no retired-name default
     assert qm.qm_svc == ""
 
 
 def test_qmconfig_req_queue_derives_from_short() -> None:
-    qm = QmConfig(name="PCMKAPP", short="PCMK", svc="SVCQM", svc_conn="10.60.0.50")
-    assert qm.req_queue == "PCMK.SVC.REQUEST"  # this stack's own queue on SVCQM (1b)
+    qm = QmConfig(name="RDQMAPP", short="RDQM", svc="SVCQM", svc_conn="10.60.0.50")
+    assert qm.req_queue == "RDQM.SVC.REQUEST"  # this stack's own queue on SVCQM (1b)
 
 
 def test_qmconfig_req_queue_empty_without_short() -> None:
-    assert QmConfig(name="PCMKAPP").req_queue == ""
+    assert QmConfig(name="RDQMAPP").req_queue == ""
 
 
 def test_svc_identity_reads_the_svc_block() -> None:
@@ -62,17 +60,9 @@ def test_svc_identity_fail_loud_when_incomplete() -> None:
         _svc_identity({"svc": {"short": "SVC"}})  # no conn
 
 
-# Minimal seeded topology covering all 4 stacks + the groups they reference.
+# Minimal seeded topology covering all 3 stacks + the groups they reference.
 TOPO = (
     "nodes:\n"
-    "  san-a: { box: san }\n"
-    "  san-b: { box: san }\n"
-    "  pcmk-a1: { box: pcmk }\n"
-    "  pcmk-a2: { box: pcmk }\n"
-    "  pcmk-a3: { box: pcmk }\n"
-    "  pcmk-b1: { box: pcmk }\n"
-    "  pcmk-b2: { box: pcmk }\n"
-    "  pcmk-b3: { box: pcmk }\n"
     "  rdqm-a1: { box: mq-rdqm }\n"
     "  rdqm-a2: { box: mq-rdqm }\n"
     "  rdqm-a3: { box: mq-rdqm }\n"
@@ -86,35 +76,11 @@ TOPO = (
     "  nha-rhel-crr-b2: { box: mq-nativeha }\n"
     "  nha-rhel-crr-b3: { box: mq-nativeha }\n"
     "groups:\n"
-    "  san_a:      [san-a]\n"
-    "  san_b:      [san-b]\n"
-    "  pcmk_a:     [pcmk-a1, pcmk-a2, pcmk-a3]\n"
-    "  pcmk_b:     [pcmk-b1, pcmk-b2, pcmk-b3]\n"
     "  rdqm_a:     [rdqm-a1, rdqm-a2, rdqm-a3]\n"
     "  rdqm_b:     [rdqm-b1, rdqm-b2, rdqm-b3]\n"
     "  nha_rhel_crr_a: [nha-rhel-crr-a1, nha-rhel-crr-a2, nha-rhel-crr-a3]\n"
     "  nha_rhel_crr_b: [nha-rhel-crr-b1, nha-rhel-crr-b2, nha-rhel-crr-b3]\n"
     "stacks:\n"
-    "  pcmk-ubuntu:\n"
-    "    mechanism: pacemaker-san\n"
-    "    os_family: ubuntu\n"
-    "    short: PCMK\n"
-    "    cluster_group: pcmk_a\n"
-    "    groups: [san_a, pcmk_a, san_b, pcmk_b]\n"
-    "    provision: ansible/site-pcmk.yml\n"
-    "    secrets: [pcmk_hacluster_password, mqweb_admin_password]\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
-    "    alloc:\n"
-    "      exporter_app_port: 9157\n"
-    "      exporter_svc_port: 9158\n"
-    "      app_unit: app-pcmk\n"
-    "      svc_port: 1414\n"
-    "    verbs:\n"
-    "      qm-create:  { playbook: site-pcmk-qm.yml }\n"
-    "      qm-destroy: { playbook: site-pcmk-qm-down.yml }\n"
-    "      qm-up:      { pcs: 'resource enable mq_group' }\n"
-    "      qm-down:    { pcs: 'resource disable mq_group' }\n"
-    "      qm-status:  { pcs: 'status resources' }\n"
     "  rdqm-rhel:\n"
     "    mechanism: rdqm\n"
     "    os_family: rhel\n"
@@ -175,26 +141,26 @@ def _seed(tmp_path):
     (tmp_path / "lab" / "topology.yaml").write_text(TOPO)
 
 
-def test_four_canonical_stacks(monkeypatch, tmp_path):
+def test_three_canonical_stacks(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stacks = lab_stacks()
-    assert set(stacks) == {"pcmk-ubuntu", "rdqm-rhel", "nativeha-rhel-crr", "nativeha-ubuntu"}
-    pu = stacks["pcmk-ubuntu"]
-    assert pu.mechanism == "pacemaker-san"
-    assert pu.os_family == "ubuntu"
-    assert pu.short == "PCMK"
-    assert pu.qm.qm_app == "PCMKAPP"  # name derives from short (#351)
-    assert "pcmk_a" in pu.groups and "pcmk_b" in pu.groups  # full HADR shape
+    assert set(stacks) == {"rdqm-rhel", "nativeha-rhel-crr", "nativeha-ubuntu"}
+    rr = stacks["rdqm-rhel"]
+    assert rr.mechanism == "rdqm"
+    assert rr.os_family == "rhel"
+    assert rr.short == "RDQM"
+    assert rr.qm.qm_app == "RDQMAPP"  # name derives from short (#351)
+    assert "rdqm_a" in rr.groups and "rdqm_b" in rr.groups  # full HADR shape
 
 
 def test_stack_members_flattens_groups(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    members = stack_members("pcmk-ubuntu")
+    members = stack_members("rdqm-rhel")
     assert members is not None
-    assert "pcmk-a1" in members
-    assert "pcmk-b1" in members  # site B in canonical shape
+    assert "rdqm-a1" in members
+    assert "rdqm-b1" in members  # site B in canonical shape
 
 
 def test_stack_members_unknown_returns_none(monkeypatch, tmp_path):
@@ -267,7 +233,7 @@ def test_stack_dr_hosts_empty_when_stack_declares_no_dr_groups(monkeypatch, tmp_
     hosts — the marker's absence is what makes `--no-dr` inapplicable (#188)."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    assert stack_dr_hosts("pcmk-ubuntu") == []
+    assert stack_dr_hosts("rdqm-rhel") == []
 
 
 def test_stack_dr_hosts_unknown_stack_is_empty(monkeypatch, tmp_path):
@@ -315,7 +281,7 @@ def test_stack_dr_hosts_flattens_and_dedupes(monkeypatch, tmp_path):
 def test_stack_members_effective_full_when_not_no_dr(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    assert stack_members_effective("pcmk-ubuntu", no_dr=False) == stack_members("pcmk-ubuntu")
+    assert stack_members_effective("rdqm-rhel", no_dr=False) == stack_members("rdqm-rhel")
 
 
 def test_stack_members_effective_unknown_stack_is_none(monkeypatch, tmp_path):
@@ -325,13 +291,10 @@ def test_stack_members_effective_unknown_stack_is_none(monkeypatch, tmp_path):
 
 
 def test_cluster_group_populated_for_real_stacks(monkeypatch, tmp_path):
-    """cluster_group is set to the cluster node group, not the SAN or other first group."""
+    """cluster_group is set to the cluster node group."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stacks = lab_stacks()
-    # pcmk-ubuntu: groups[0] is san_a (SAN host), cluster_group must be pcmk_a
-    assert stacks["pcmk-ubuntu"].cluster_group == "pcmk_a"
-    # rdqm-rhel and nativeha-rhel-crr also carry their cluster_group
     assert stacks["rdqm-rhel"].cluster_group == "rdqm_a"
     assert stacks["nativeha-rhel-crr"].cluster_group == "nha_rhel_crr_a"
 
@@ -366,14 +329,13 @@ def test_qm_names_derive_from_short(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stacks = lab_stacks()
-    assert stacks["pcmk-ubuntu"].qm.qm_app == "PCMKAPP"
     assert stacks["rdqm-rhel"].qm.qm_app == "RDQMAPP"
     assert stacks["nativeha-rhel-crr"].qm.qm_app == "NHARCAPP"
     assert stacks["nativeha-ubuntu"].qm.qm_app == "NHAUAPP"
     # svc is shared across all stacks
     assert {s.qm.qm_svc for s in stacks.values()} == {"SVCQM"}
     # each stack still owns a distinct request queue on that shared SVCQM
-    assert stacks["pcmk-ubuntu"].qm.req_queue == "PCMK.SVC.REQUEST"
+    assert stacks["rdqm-rhel"].qm.req_queue == "RDQM.SVC.REQUEST"
     assert stacks["nativeha-rhel-crr"].qm.req_queue == "NHARC.SVC.REQUEST"
 
 
@@ -383,7 +345,6 @@ def test_dashboard_folder_derives_from_mechanism_and_os(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stacks = lab_stacks()
-    assert stacks["pcmk-ubuntu"].dashboard_folder == "PCMK (Ubuntu)"
     assert stacks["rdqm-rhel"].dashboard_folder == "RDQM (RHEL)"
     assert stacks["nativeha-rhel-crr"].dashboard_folder == "Native HA (RHEL)"
     assert stacks["nativeha-ubuntu"].dashboard_folder == "Native HA (Ubuntu)"
@@ -425,11 +386,5 @@ def test_ubuntu_stack_is_supported_on_either_arch(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stacks = lab_stacks()
-    for name in ("pcmk-ubuntu", "nativeha-ubuntu"):
-        assert rhel_stack_unsupported_reason(stacks[name], ARM) is None
-        assert rhel_stack_unsupported_reason(stacks[name], X86) is None
-
-
-def test_dashboard_folder_for_pacemaker_drbd():
-    # The pcmk-drbd-ubuntu arm (epic .github#310) folders apart from the SAN arm.
-    assert dashboard_folder_for("pacemaker-drbd", "ubuntu") == "PCMK-DRBD (Ubuntu)"
+    assert rhel_stack_unsupported_reason(stacks["nativeha-ubuntu"], ARM) is None
+    assert rhel_stack_unsupported_reason(stacks["nativeha-ubuntu"], X86) is None

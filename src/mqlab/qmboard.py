@@ -558,7 +558,7 @@ def render_qm_board(
         y += 8
 
     # ④ Native-HA log-health band (#811): only the Native HA arms run the loglifecycle
-    # collector, so the band is gated on mechanism — a pcmk/rdqm/single board must not show
+    # collector, so the band is gated on mechanism — an rdqm/single board must not show
     # empty mqlab_log_* panels for a collector that isn't deployed there.
     if cfg.get("mechanism") == "native-ha":
         panels.append(

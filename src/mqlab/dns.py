@@ -9,8 +9,8 @@ Naming scheme (epic-21 spec, Option A):
   ``<plane>`` is the topology NIC name minus the ``net-`` prefix (the function
   label the lab already carries: ``net-data-a`` -> ``data-a``);
 - the bare host name is a CNAME to its *primary* (service-facing) interface, so
-  ``pcmk-a1`` resolves to its data-plane address, never the mgmt/hb/san planes;
-- pcmk/rdqm VIPs get ``<short>-vip`` / ``<short>-vip-ext`` service names (Native
+  ``rdqm-a1`` resolves to its data-plane address, never the mgmt/hb planes;
+- RDQM VIPs get ``<short>-vip-a`` / ``<short>-vip-b`` service names (Native
   HA has no VIP — clients dial the three per-instance ``<host>-data-a`` names,
   which the generic per-NIC records already produce);
 - reverse (PTR) records are grouped by ``/24`` ``in-addr.arpa`` zone. The
@@ -37,7 +37,7 @@ ZONES = {"client": "client.com", "service": "service.com"}
 # The bare host name CNAMEs to the first interface present, by service-facing
 # priority: the data planes are a node's public identity; net-ext is the
 # inter-business link; net-mgmt (The Watcher) is the last resort so a node is
-# never nameless. hb/san/wan planes are never a primary identity.
+# never nameless. hb/wan planes are never a primary identity.
 _PRIMARY_ORDER = ("net-data-a", "net-data-b", "net-ext", "net-mgmt")
 
 
@@ -95,22 +95,16 @@ def _node_forward(host: str, spec: dict[str, Any], zone: str) -> list[Record]:
 
 
 def _vips(topo: dict[str, Any]) -> list[tuple[str, str]]:
-    """(fqdn, ip) for each pcmk/rdqm VIP — client-org service names. The site suffix
-    matches the ``-data-a``/``-data-b`` convention: ``-a`` is the live (site-A) VIP,
-    ``-b`` the DR (site-B) VIP; ``-ext`` are the partner-facing (net-ext) VIPs.
-    Native HA stacks omit ``vip`` and contribute none."""
+    """(fqdn, ip) for each stack VIP (RDQM) — client-org service names. The site
+    suffix matches the ``-data-a``/``-data-b`` convention: ``-a`` is the live (site-A)
+    VIP, ``-b`` the DR (site-B) VIP. Native HA stacks omit ``vip`` and contribute none."""
     out: list[tuple[str, str]] = []
     for cfg in (topo.get("stacks") or {}).values():
         short = ((cfg or {}).get("short") or "").lower()
         qm = (cfg or {}).get("qm") or {}
         if not short:
             continue
-        for key, label in (
-            ("vip", "vip-a"),
-            ("vip_b", "vip-b"),
-            ("vip_ext", "vip-ext-a"),
-            ("vip_ext_b", "vip-ext-b"),
-        ):
+        for key, label in (("vip", "vip-a"), ("vip_b", "vip-b")):
             if qm.get(key):
                 out.append((f"{short}-{label}.{ZONES['client']}", str(qm[key])))
     return out

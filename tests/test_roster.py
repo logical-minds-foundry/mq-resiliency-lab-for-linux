@@ -6,15 +6,15 @@ from mqlab.roster import RosterError, render_roster
 
 TOPO = {
     "nodes": {
-        "san-a": {"nics": {"net-mgmt": "10.50.0.5"}},
-        "pcmk-a1": {"nics": {"net-mgmt": "10.50.0.51"}},
+        "rdqm-a1": {"nics": {"net-mgmt": "10.50.0.31"}},
+        "rdqm-b1": {"nics": {"net-mgmt": "10.50.0.41"}},
     },
     "groups": {
-        "san_a": ["san-a"],
-        "pcmk_a": ["pcmk-a1"],
-        "site_a": ["san-a", "pcmk-a1"],
+        "rdqm_a": ["rdqm-a1"],
+        "rdqm_b": ["rdqm-b1"],
+        "site_a": ["rdqm-a1", "rdqm-b1"],
     },
-    "stacks": {"pcmk-ubuntu": {"groups": ["san_a", "pcmk_a"]}},
+    "stacks": {"rdqm-rhel": {"groups": ["rdqm_a", "rdqm_b"]}},
 }
 
 
@@ -23,49 +23,49 @@ def test_render_emits_targets_grains_in_first_appearance_order(monkeypatch):
     out = render_roster(TOPO)
     assert out == (
         "# salt-ssh roster — generated from lab/topology.yaml. Do not edit by hand.\n"
-        "san-a:\n"
-        "  host: 10.50.0.5\n"
+        "rdqm-a1:\n"
+        "  host: 10.50.0.31\n"
         "  user: vagrant\n"
         "  priv: /home/tester/.vagrant.d/insecure_private_key\n"
         "  sudo: true\n"
         "  minion_opts:\n"
         "    grains:\n"
         "      roster_groups:\n"
-        "      - san_a\n"
+        "      - rdqm_a\n"
         "      - site_a\n"
         "      roster_stacks:\n"
-        "      - pcmk-ubuntu\n"
-        "pcmk-a1:\n"
-        "  host: 10.50.0.51\n"
+        "      - rdqm-rhel\n"
+        "rdqm-b1:\n"
+        "  host: 10.50.0.41\n"
         "  user: vagrant\n"
         "  priv: /home/tester/.vagrant.d/insecure_private_key\n"
         "  sudo: true\n"
         "  minion_opts:\n"
         "    grains:\n"
         "      roster_groups:\n"
-        "      - pcmk_a\n"
+        "      - rdqm_b\n"
         "      - site_a\n"
         "      roster_stacks:\n"
-        "      - pcmk-ubuntu\n"
+        "      - rdqm-rhel\n"
     )
 
 
 def test_missing_mgmt_ip_raises():
-    topo = {"nodes": {"san-a": {"nics": {}}}, "groups": {"san_a": ["san-a"]}, "stacks": {}}
-    with pytest.raises(RosterError, match="no net-mgmt IP: san-a"):
+    topo = {"nodes": {"rdqm-a1": {"nics": {}}}, "groups": {"rdqm_a": ["rdqm-a1"]}, "stacks": {}}
+    with pytest.raises(RosterError, match="no net-mgmt IP: rdqm-a1"):
         render_roster(topo)
 
 
 def test_group_referencing_undefined_host_raises():
-    topo = {"nodes": {}, "groups": {"san_a": ["san-a"]}, "stacks": {}}
-    with pytest.raises(RosterError, match="undefined host: san-a"):
+    topo = {"nodes": {}, "groups": {"rdqm_a": ["rdqm-a1"]}, "stacks": {}}
+    with pytest.raises(RosterError, match="undefined host: rdqm-a1"):
         render_roster(topo)
 
 
 def test_stack_referencing_undefined_group_raises():
     topo = {
-        "nodes": {"san-a": {"nics": {"net-mgmt": "10.50.0.5"}}},
-        "groups": {"san_a": ["san-a"]},
+        "nodes": {"rdqm-a1": {"nics": {"net-mgmt": "10.50.0.31"}}},
+        "groups": {"rdqm_a": ["rdqm-a1"]},
         "stacks": {"bad": {"groups": ["nope"]}},
     }
     with pytest.raises(RosterError, match="undefined group: nope"):

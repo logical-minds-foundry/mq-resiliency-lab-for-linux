@@ -28,14 +28,9 @@ if TYPE_CHECKING:
 
 DASHBOARD_UID = "lab-fleet-node"  # pinned — referenced by mqlab obs open + docs
 
-# Curated, lab-shaped order. Each row rolls up one-or-more atomic groups; SAN
-# pairs both site SANs, the cluster arms split by site.
+# Curated, lab-shaped order. Each row rolls up one-or-more atomic groups; the
+# cluster arms split by site.
 ROWS: list[tuple[str, list[str]]] = [
-    # SAN folds into its PCMK site row — the iSCSI SAN is part of that arm's HA
-    # setup, so each site shows 4 nodes (san + 3 cluster) as one unit (no separate
-    # SAN row). Topology groups are unchanged; this is display grouping only.
-    ("PCMK · A", ["pcmk_a", "san_a"]),
-    ("PCMK · B", ["pcmk_b", "san_b"]),
     ("RDQM · A", ["rdqm_a"]),
     ("RDQM · B", ["rdqm_b"]),
     ("App · SVC", ["app", "svc"]),
@@ -72,8 +67,8 @@ def _row(title: str, y: int) -> dict[str, Any]:
     }
 
 
-def _up_panel(label: str, sel: str, y: int, link_url: str | None = None) -> dict[str, Any]:
-    panel: dict[str, Any] = {
+def _up_panel(label: str, sel: str, y: int) -> dict[str, Any]:
+    return {
         "type": "stat",
         "title": f"{label} — up",
         "gridPos": {"h": 4, "w": 10, "x": 0, "y": y},
@@ -92,10 +87,6 @@ def _up_panel(label: str, sel: str, y: int, link_url: str | None = None) -> dict
         },
         "targets": [{"expr": f'up{{job="node", groups=~"{sel}"}}', "legendFormat": "{{host}}"}],
     }
-    if link_url is not None:
-        # drill-link out to the dedicated cluster cockpit board (#219 §6.7)
-        panel["links"] = [{"title": "Cluster cockpit ↗", "url": link_url, "targetBlank": False}]
-    return panel
 
 
 def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
@@ -112,19 +103,19 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
 
 
 # --- MQ Service (Layer 2) ---------------------------------------------------
-# One curated row per queue manager we actually run today: our HA QM (PCMKAPP)
-# and the shared SVC counterparty (SVCQM, #446 — was the per-stack PCMKSVC). Each
+# One curated row per queue manager: our HA QM (NHAUAPP, the nativeha-ubuntu QM)
+# and the shared SVC counterparty (SVCQM, #446). Each
 # entry also names the channels we care about (the client SVRCONN + the inter-QM
 # SENDER/RECEIVER pair, named identically on both ends), so the panel draws a tile
 # per channel object even when it has no live status. Queue rows are driven by the
 # exporter's curated monitoredQueues, so the depth table + rate graphs need no per-QM
 # list here.
 QMS: list[tuple[str, str, list[str]]] = [
-    ("PCMKAPP", "service · Ubuntu HA/DR", ["APP.SVRCONN", "PCMKAPP.SVCQM", "SVCQM.PCMKAPP"]),
+    ("NHAUAPP", "service · Ubuntu HA/DR", ["APP.SVRCONN", "NHAUAPP.SVCQM", "SVCQM.NHAUAPP"]),
     (
         "SVCQM",
         "counterparty · SVC service",
-        ["SVC.SVRCONN", "SVCQM.PCMKAPP", "PCMKAPP.SVCQM"],
+        ["SVC.SVRCONN", "SVCQM.NHAUAPP", "NHAUAPP.SVCQM"],
     ),
 ]
 
@@ -245,7 +236,7 @@ def _queue_rates_panel(qm: str, y: int) -> dict[str, Any]:
 # to host bridge `virbr-X` (throughput) and shorthand `X` (display).
 NET_SECTIONS: list[tuple[str, list[str]]] = [
     ("Message path", ["net-client", "net-svc", "net-ext", "net-data-a", "net-data-b"]),
-    ("Cluster + storage", ["net-hb-a", "net-san-a", "net-hb-b", "net-san-b"]),
+    ("Cluster", ["net-hb-a", "net-hb-b"]),
     ("Cross-site + mgmt", ["net-wan", "net-mgmt"]),
 ]
 
@@ -315,9 +306,7 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
         sel = "|".join(groups)
         panels.append(_row(f"VMs · {label}", y))
         y += 1
-        # the PCMK site rows drill into the dedicated cluster cockpit (#219)
-        link = "/d/lab-pcmk-ubuntu-cluster" if label.startswith("PCMK") else None
-        panels.append(_up_panel(label, sel, y, link_url=link))
+        panels.append(_up_panel(label, sel, y))
         panels.append(_cpu_panel(label, sel, y))
         y += 4
 

@@ -15,9 +15,8 @@ row):
 
   ② Stacks — one rollup row per stack from the topology stack registry: status stripe ·
     mechanism · Site A (live) · Site B (DR) · flow · drill ↗ to the stack's cockpit. QM
-    owner + node health come from the same cluster_* metrics the cockpits emit; the SAN
-    groups fold into the pcmk row's site node sets. QM names derive from each stack's
-    #351 short — no QM literal is hardcoded.
+    owner + node health come from the same cluster_* metrics the cockpits emit. QM names
+    derive from each stack's #351 short — no QM literal is hardcoded.
 
   ③ Log pipeline (#1238) — rendered when the topology has an obs node: a time series of
     the Data Prepper OpenSearch sink's documents written vs rejected (rate of each counter),
@@ -364,21 +363,8 @@ def _support_rows(topo: dict[str, Any], y: int = 0) -> list[dict[str, Any]]:
     return panels
 
 
-_PACEMAKER_MECHANISMS = ("pacemaker-san", "pacemaker-drbd")
-
-
-def _owner_resource(mechanism: str, short: str) -> str:
-    """The `cluster_resource_owner` resource label for a stack. Pacemaker arms own the QM
-    via the pacemaker resource id (mq_qm); the other mechanisms own by the short-derived
-    QM name (#351)."""
-    if mechanism in _PACEMAKER_MECHANISMS:
-        return "mq_qm"
-    return f"{short}APP"
-
-
 def _sites(groups: list[str]) -> tuple[list[str], list[str]]:
-    """Split a stack's groups into (site-A, site-B) by the `_a`/`_b` suffix — the SAN
-    groups (san_a/san_b) fold into their site's node set automatically."""
+    """Split a stack's groups into (site-A, site-B) by the `_a`/`_b` suffix."""
     a = [g for g in groups if g.endswith("_a")]
     b = [g for g in groups if g.endswith("_b")]
     return a, b
@@ -424,7 +410,7 @@ def _stack_row(name: str, cfg: dict[str, Any], y: int) -> list[dict[str, Any]]:
     mechanism = cfg["mechanism"]
     short = cfg["short"]
     groups = cfg.get("groups", [])
-    resource = _owner_resource(mechanism, short)
+    resource = f"{short}APP"  # every stack owns its QM by the short-derived name (#351)
     a_groups, b_groups = _sites(groups)
     all_sel = "|".join(groups)
 

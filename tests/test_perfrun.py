@@ -171,12 +171,12 @@ def test_outcomes_ignore_timing_lines_with_no_banner_and_unnamed_tasks():
 # --------------------------------------------------------------------------- #
 def test_batches_map_each_vagrant_up_label_to_its_guests_dropping_flags():
     steps = [
-        _vms_step("s vms up [1/2]", "san-a", "obs", serial=True),
+        _vms_step("s vms up [1/2]", "rdqm-a1", "obs", serial=True),
         _vms_step("s vms up [2/2]", "app-client"),
         CommandStep("render", Command(["mqlab", "dns", "render"])),
     ]
     assert vagrant_up_batches(steps) == {
-        "s vms up [1/2]": ["san-a", "obs"],
+        "s vms up [1/2]": ["rdqm-a1", "obs"],
         "s vms up [2/2]": ["app-client"],
     }
 
@@ -228,7 +228,7 @@ def test_register_phase_degrades_on_a_malformed_step():
 
 def test_finish_attributes_each_batch_time_and_retries_to_every_vm_in_it(runs, tmp_path):
     perf = _perf()
-    batch1 = _vms_step("s vms up [1/3]", "san-a", "pcmk-a1", serial=True)
+    batch1 = _vms_step("s vms up [1/3]", "rdqm-a1", "rdqm-a2", serial=True)
     batch2 = _vms_step("s vms up [2/3]", "obs")
     batch3 = _vms_step("s vms up [3/3]", "app-client", "svc-sim")
     perf.register_phase("net", [])
@@ -239,8 +239,8 @@ def test_finish_attributes_each_batch_time_and_retries_to_every_vm_in_it(runs, t
     perf.failed("vms", 1)  # batch 3 never completed
     perf.finish(tmp_path / "absent.log", "20260930T000000Z")
     ms = _report(runs)["milestones"]
-    assert ms["boot:san-a"] == ms["boot:pcmk-a1"] == 154.95
-    assert ms["boot_retries:san-a"] == ms["boot_retries:pcmk-a1"] == 0
+    assert ms["boot:rdqm-a1"] == ms["boot:rdqm-a2"] == 154.95
+    assert ms["boot_retries:rdqm-a1"] == ms["boot_retries:rdqm-a2"] == 0
     assert ms["boot:obs"] == 310.0
     assert ms["boot_retries:obs"] == 2
     assert "boot:app-client" not in ms

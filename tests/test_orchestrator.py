@@ -184,7 +184,7 @@ def test_run_steps_retry_exhausted_fails_loud(tmp_path, monkeypatch):
     policy = RetryPolicy(attempts=2, base_delay=1.0, backoff=1.0, max_delay=1.0)
     with pytest.raises(StepFailedError) as caught:
         run_steps(
-            [CommandStep("stack vms up", Command(["vagrant", "up", "san-a"]), retry=policy)],
+            [CommandStep("stack vms up", Command(["vagrant", "up", "rdqm-a1"]), retry=policy)],
             runner=runner,
             renderer=_renderer(),
             transcript=transcript,

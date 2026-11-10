@@ -62,7 +62,7 @@ def test_tarball_name_ubuntu_fat_box_tracks_host_arch():
     # arch-variant tarballs. Acquisition resolves the arch through the same
     # box_build_arch authority the box builder consumes, so it stages UbuntuLinuxARM64
     # on Apple Silicon and UbuntuLinuxX64 on the cloud — bake + acquire agree.
-    for role in ("mq-client", "obs", "mq-nativeha", "pcmk"):
+    for role in ("mq-client", "obs", "mq-nativeha"):
         entry = _CAT.box(role, _UBUNTU)
         assert (
             m.tarball_name("9.4.5.0", entry, facts=ARM)

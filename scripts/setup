@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/setup — prepare the Python environment so `mqlab` runs, then point the
 # operator at lab bring-up. This sets up the ENVIRONMENT only; it does NOT bring
-# the lab up (that is `mqlab bootstrap <setup>`).
+# the lab up (that is `mqlab bootstrap <stack>`).
 #
 # Targets macOS and Linux. Assumes you can install host packages (root/sudo) on a
 # virtualization-capable host; `mqlab doctor` checks the host itself.
@@ -40,11 +40,11 @@ setup: environment ready.
 
 Next steps:
   1. Pre-flight the host:      mqlab doctor
-  2. Bring up a setup:         mqlab bootstrap <setup>     (e.g. distributed-pcmk-ubuntu)
+  2. Bring up a stack:         mqlab bootstrap <stack>     (e.g. nativeha-ubuntu)
 
 Run mqlab via the synced environment, e.g.:
   uv run mqlab doctor
-  uv run mqlab bootstrap distributed-pcmk-ubuntu
+  uv run mqlab bootstrap nativeha-ubuntu
 
 (Or activate the venv: '. .venv/bin/activate' then 'mqlab ...'.)
 NEXT

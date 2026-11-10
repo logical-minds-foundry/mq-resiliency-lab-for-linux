@@ -21,7 +21,6 @@ from mqlab.watcherboard import (
     _SUPPORT_COLS,
     _UTIL,
     DASHBOARD_UID,
-    _owner_resource,
     build_watcher,
     lab_watcher_dashboard,
     watcher_dashboard_path,
@@ -37,9 +36,8 @@ def _thresholds(panel: dict) -> list[dict]:
 
 
 # A minimal fixture topology: the five commons support groups (infra carries two DNS
-# hosts) + two stacks — pacemaker-san (owner resource = the pacemaker id "mq_qm") and
-# rdqm (owner resource = the short-derived QM name). Both stacks carry site-A + site-B
-# groups so the site split (and SAN fold-in) is exercised.
+# hosts) + two stacks — native-ha and rdqm, each owning its QM by the short-derived
+# QM name. Both stacks carry site-A + site-B groups so the site split is exercised.
 FIXTURE: dict = {
     "groups": {
         "infra": ["infra-client", "infra-svc"],
@@ -47,19 +45,17 @@ FIXTURE: dict = {
         "probe": ["mon-probe"],
         "svc": ["svc-sim"],
         "app": ["app-client"],
-        "san_a": ["san-a"],
-        "san_b": ["san-b"],
-        "pcmk_a": ["pcmk-a1"],
-        "pcmk_b": ["pcmk-b1"],
+        "nha_ubuntu_a": ["nha-ubuntu-a1"],
+        "nha_ubuntu_b": ["nha-ubuntu-b1"],
         "rdqm_a": ["rdqm-a1"],
         "rdqm_b": ["rdqm-b1"],
     },
     "svc": {"short": "SVC"},
     "stacks": {
-        "pcmk-ubuntu": {
-            "mechanism": "pacemaker-san",
-            "short": "PCMK",
-            "groups": ["san_a", "pcmk_a", "san_b", "pcmk_b"],
+        "nativeha-ubuntu": {
+            "mechanism": "native-ha",
+            "short": "NHAU",
+            "groups": ["nha_ubuntu_a", "nha_ubuntu_b"],
         },
         "rdqm-rhel": {
             "mechanism": "rdqm",
@@ -198,24 +194,22 @@ def test_a_stack_rollup_row_per_stack():
     d = build_watcher(FIXTURE)
     labels = _row_labels(d["panels"])
     # the stack rows follow the support rows; one per stack, keyed by stack name
-    assert "pcmk-ubuntu" in labels and "rdqm-rhel" in labels
+    assert "nativeha-ubuntu" in labels and "rdqm-rhel" in labels
 
 
-def test_stack_owner_resource_is_mechanism_correct():
+def test_stack_owner_resource_is_the_short_derived_qm():
     d = build_watcher(FIXTURE)
     exprs = " ".join(_exprs(d["panels"]))
-    # pacemaker's QM owner is the pacemaker resource id (mq_qm), NOT the QM name; the
-    # other mechanisms own by the short-derived QM name (#351).
-    assert 'cluster_resource_owner{resource="mq_qm"' in exprs
+    # every stack owns its QM by the short-derived QM name (#351).
+    assert 'cluster_resource_owner{resource="NHAUAPP"' in exprs
     assert 'cluster_resource_owner{resource="RDQMAPP"' in exprs
 
 
-def test_stack_shows_both_sites_with_san_folded_in():
+def test_stack_shows_both_sites():
     d = build_watcher(FIXTURE)
     blob = json.dumps(d["panels"])
-    # both sites are shown (live + DR), and the pcmk SAN groups fold into the site node
-    # sets (san_a with pcmk_a on Site A, san_b with pcmk_b on Site B).
-    assert "san_a|pcmk_a" in blob or "pcmk_a" in blob and "san_a" in blob
+    # both sites are shown (live + DR), each scoped to its own site group
+    assert 'groups=~\\"nha_ubuntu_a\\"' in blob and 'groups=~\\"nha_ubuntu_b\\"' in blob
     assert "cluster_node_online" in blob  # per-site node health rollup
 
 
@@ -225,7 +219,7 @@ def test_stack_flow_and_drill_link():
     exprs = " ".join(_exprs(d["panels"]))
     assert "sum(rate(app_roundtrip_total[1m]))" in exprs
     links = [ln["url"] for p in d["panels"] for ln in p.get("links", [])]
-    assert "/d/lab-pcmk-ubuntu-cluster" in links  # pcmk cockpit
+    assert "/d/lab-nativeha-ubuntu-cluster" in links  # native-ha cockpit
     assert "/d/lab-rdqm-rhel-cluster" in links  # rdqm cockpit
 
 
@@ -288,9 +282,9 @@ def test_real_topology_renders_a_valid_watcher_board():
     # a support row for every real commons support host …
     for host in SUPPORT_HOSTS:
         assert host in labels, f"real topology: no support row for {host}"
-    # … and a rollup row for every real stack (pcmk / rdqm / nhar / nhau) — including both
+    # … and a rollup row for every real stack (rdqm / nhar / nhau) — including both
     # native-ha stacks, which the old truncated stripe collapsed to an ambiguous "nati…"
-    for stack in ("pcmk-ubuntu", "rdqm-rhel", "nativeha-rhel-crr", "nativeha-ubuntu"):
+    for stack in ("rdqm-rhel", "nativeha-rhel-crr", "nativeha-ubuntu"):
         assert stack in labels, f"real topology: no stack row for {stack}"
 
 
@@ -406,7 +400,7 @@ def test_stack_row_carries_its_full_name_in_column_two():
     # #505: with the stripe title blanked, the stack name must live in column 2 alongside the
     # mechanism ("**name**<br/>mechanism", mirroring the support rows).
     blob = _bold_texts(build_watcher(FIXTURE)["panels"])
-    assert "**pcmk-ubuntu**<br/>pacemaker-san" in blob
+    assert "**nativeha-ubuntu**<br/>native-ha" in blob
     assert "**rdqm-rhel**<br/>rdqm" in blob
 
 
@@ -415,11 +409,3 @@ def test_both_native_ha_stacks_are_distinguishable_in_real_topology():
     # to an ambiguous "nati…"; the column-2 name now tells them apart.
     blob = _bold_texts(json.loads(lab_watcher_dashboard())["panels"])
     assert "**nativeha-rhel-crr**" in blob and "**nativeha-ubuntu**" in blob
-
-
-def test_owner_resource_is_mq_qm_for_both_pacemaker_mechanisms():
-    # Both Pacemaker arms own the QM as the pacemaker resource id, so the new
-    # pcmk-drbd-ubuntu stack tiles never silently read "No data" (epic .github#310).
-    assert _owner_resource("pacemaker-san", "PCMK") == "mq_qm"
-    assert _owner_resource("pacemaker-drbd", "PDRBD") == "mq_qm"
-    assert _owner_resource("rdqm", "RDQM") == "RDQMAPP"

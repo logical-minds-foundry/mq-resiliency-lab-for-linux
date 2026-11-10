@@ -31,14 +31,12 @@ def _seed_monitoring(tmp_path):
     # read nodes:/groups: straight from topology — no setups:/stacks: needed. Every
     # group host also needs a node with a net-mgmt IP: render_inventory / lab_dashboard
     # raise on a group that references an undefined host. dashboard.ROWS references
-    # pcmk_a/san_a/pcmk_b/san_b/rdqm_a/rdqm_b/app/svc/obs_box/probe, so all are seeded.
+    # rdqm_a/rdqm_b/app/svc/obs_box/probe, so all are seeded; nha_ubuntu_a gives a
+    # no-VIP Native HA stack its cluster_group hosts.
     (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  san-a: {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
-        "  san-b: {box: san, nics: {net-mgmt: 10.50.0.6}}\n"
-        "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
-        "  pcmk-b1: {box: pcmk, nics: {net-mgmt: 10.50.0.61}}\n"
+        "  nha-ubuntu-a1: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.11}}\n"
         "  rdqm-a1: {box: mq-rdqm, nics: {net-mgmt: 10.50.0.31}}\n"
         "  rdqm-b1: {box: mq-rdqm, nics: {net-mgmt: 10.50.0.41}}\n"
         "  svc-sim: {box: mq-client, nics: {net-mgmt: 10.50.0.50}}\n"
@@ -46,8 +44,7 @@ def _seed_monitoring(tmp_path):
         "  obs: {box: obs, nics: {net-mgmt: 10.50.0.2}}\n"
         "  mon-probe: {box: mq-client, nics: {net-mgmt: 10.50.0.3}}\n"
         "groups:\n"
-        "  san_a: [san-a]\n  san_b: [san-b]\n"
-        "  pcmk_a: [pcmk-a1]\n  pcmk_b: [pcmk-b1]\n"
+        "  nha_ubuntu_a: [nha-ubuntu-a1]\n"
         "  rdqm_a: [rdqm-a1]\n  rdqm_b: [rdqm-b1]\n"
         "  svc: [svc-sim]\n  app: [app-client]\n"
         "  obs_box: [obs]\n  probe: [mon-probe]\n"
@@ -83,10 +80,10 @@ def test_obs_targets_also_writes_mq_exporters_deployment_list(monkeypatch, tmp_p
     topo = tmp_path / "lab" / "topology.yaml"
     stack_yaml = (
         "stacks:\n"
-        "  pcmk-ubuntu:\n"
-        "    short: PCMK\n"
-        "    qm: {vip: 10.10.1.200}\n"
-        "    alloc: {exporter_app_port: 9157}\n"
+        "  rdqm-rhel:\n"
+        "    short: RDQM\n"
+        "    qm: {vip: 10.10.1.100}\n"
+        "    alloc: {exporter_app_port: 9159}\n"
     )
     topo.write_text(topo.read_text() + stack_yaml)
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
@@ -97,7 +94,7 @@ def test_obs_targets_also_writes_mq_exporters_deployment_list(monkeypatch, tmp_p
     written = tmp_path / "build" / "work" / "obs" / "mq-exporters.json"
     instances = json.loads(written.read_text())["mq_exporters"]
     assert {i["role"] for i in instances} == {"app", "svc"}
-    assert {i["port"] for i in instances} == {9157, 9158}
+    assert {i["port"] for i in instances} == {9159, 9158}
 
 
 def test_obs_targets_stack_scopes_only_the_exporter_deployment_list(monkeypatch, tmp_path):
@@ -109,10 +106,10 @@ def test_obs_targets_stack_scopes_only_the_exporter_deployment_list(monkeypatch,
     topo = tmp_path / "lab" / "topology.yaml"
     stacks_yaml = (
         "stacks:\n"
-        "  pcmk-ubuntu:\n"
-        "    short: PCMK\n"
-        "    qm: {vip: 10.10.1.200}\n"
-        "    alloc: {exporter_app_port: 9157}\n"
+        "  nativeha-ubuntu:\n"
+        "    short: NHAU\n"
+        "    cluster_group: nha_ubuntu_a\n"
+        "    alloc: {exporter_app_port: 9163}\n"
         "  rdqm-rhel:\n"
         "    short: RDQM\n"
         "    qm: {vip: 10.10.1.201}\n"
@@ -121,17 +118,18 @@ def test_obs_targets_stack_scopes_only_the_exporter_deployment_list(monkeypatch,
     topo.write_text(topo.read_text() + stacks_yaml)
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
 
-    result = CliRunner().invoke(cli.app, ["obs", "targets", "--stack", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["obs", "targets", "--stack", "nativeha-ubuntu"])
 
     assert result.exit_code == 0
-    # deployment list: only pcmk-ubuntu's app + the shared svc (commons), NOT rdqm-rhel
+    # deployment list: only nativeha-ubuntu's app + the shared svc (commons), NOT rdqm-rhel
     deploy = json.loads((tmp_path / "build" / "work" / "obs" / "mq-exporters.json").read_text())
-    assert {i["stack"] for i in deploy["mq_exporters"]} == {"pcmk-ubuntu", "commons"}
+    assert {i["stack"] for i in deploy["mq_exporters"]} == {"nativeha-ubuntu", "commons"}
     # the ibmmq scrape targets stay full-topology (both stacks + svc)
     ibmmq = json.loads(
         (tmp_path / "build" / "work" / "prometheus" / "targets" / "ibmmq.json").read_text()
     )
-    assert {e["labels"]["stack"] for e in ibmmq} == {"pcmk-ubuntu", "rdqm-rhel", "commons"}
+    stacks = {e["labels"]["stack"] for e in ibmmq}
+    assert stacks == {"nativeha-ubuntu", "rdqm-rhel", "commons"}
 
 
 # --- dashboard: renders the fleet board + the cluster cockpit boards from topology ---
@@ -181,12 +179,12 @@ def test_obs_dashboard_also_renders_the_per_qm_boards(monkeypatch, tmp_path):
     topo = tmp_path / "lab" / "topology.yaml"
     topo.write_text(
         topo.read_text() + "stacks:\n"
-        "  pcmk-ubuntu:\n"
-        "    mechanism: pacemaker-san\n"
+        "  nativeha-ubuntu:\n"
+        "    mechanism: native-ha\n"
         "    os_family: ubuntu\n"
-        "    short: PCMK\n"
-        "    qm: {vip: 10.10.1.200}\n"
-        "    provision: ansible/pcmk.yml\n"
+        "    short: NHAU\n"
+        "    qm: {}\n"
+        "    provision: ansible/site-nativeha-ubuntu.yml\n"
     )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
 
@@ -194,8 +192,8 @@ def test_obs_dashboard_also_renders_the_per_qm_boards(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     dashboards = tmp_path / "build" / "work" / "grafana" / "dashboards"
-    board = dashboards / "PCMK (Ubuntu)" / "lab-qm-pcmk.json"
-    assert json.loads(board.read_text())["uid"] == "lab-qm-pcmk"
+    board = dashboards / "Native HA (Ubuntu)" / "lab-qm-nhau.json"
+    assert json.loads(board.read_text())["uid"] == "lab-qm-nhau"
 
 
 def test_obs_dashboard_portable_renders_work_edition_boards(monkeypatch, tmp_path):
@@ -416,8 +414,8 @@ def test_obs_reach_peers_writes_build_json(monkeypatch, tmp_path):
     (tmp_path / "lab").mkdir()
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  pcmk-a1: {box: pcmk, nics: {net-hb-a: 172.16.1.51}}\n"
-        "  pcmk-a2: {box: pcmk, nics: {net-hb-a: 172.16.1.52}}\n"
+        "  nha-ubuntu-a1: {box: mq-nativeha, nics: {net-hb-a: 172.16.1.11}}\n"
+        "  nha-ubuntu-a2: {box: mq-nativeha, nics: {net-hb-a: 172.16.1.12}}\n"
     )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
 
@@ -425,4 +423,4 @@ def test_obs_reach_peers_writes_build_json(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     data = json.loads((tmp_path / "build" / "work" / "obs" / "reach-peers.json").read_text())
-    assert data["pcmk-a1"]["net-hb-a"][0]["peer"] == "pcmk-a2"
+    assert data["nha-ubuntu-a1"]["net-hb-a"][0]["peer"] == "nha-ubuntu-a2"

@@ -19,7 +19,8 @@ from mqlab.dns import (
 
 # A small synthetic topology exercising both orgs, a data-plane node (primary =
 # data-a), a counterparty node with no data plane (primary = ext), and stacks with
-# a VIP, a VIP + partner VIP, a Native-HA stack (no VIP), and a short-less block.
+# a site-A + site-B VIP pair, a site-A VIP only, a Native-HA stack (no VIP), and a
+# short-less block.
 TOPO = {
     "nodes": {
         "qm-a1": {
@@ -28,16 +29,8 @@ TOPO = {
         "svc-sim": {"org": "service", "nics": {"net-mgmt": "10.50.0.50", "net-ext": "10.60.0.50"}},
     },
     "stacks": {
-        "pcmk-ubuntu": {
-            "short": "PCMK",
-            "qm": {
-                "vip": "10.10.1.200",
-                "vip_b": "10.10.2.200",
-                "vip_ext": "10.60.0.10",
-                "vip_ext_b": "10.60.0.20",
-            },
-        },
-        "rdqm-rhel": {"short": "RDQM", "qm": {"vip": "10.10.1.100"}},
+        "rdqm-rhel": {"short": "RDQM", "qm": {"vip": "10.10.1.100", "vip_b": "10.10.2.100"}},
+        "solo": {"short": "SOLO", "qm": {"vip": "10.10.1.150"}},
         "nativeha-ubuntu": {"short": "NHAU", "qm": {}},  # no VIP -> contributes nothing
         "weird": {"qm": {"vip": "10.10.1.99"}},  # no short -> skipped
     },
@@ -89,14 +82,12 @@ def test_node_forward_raises_without_nics():
 
 def test_vips_skips_shortless_and_vipless_stacks():
     vips = _vips(TOPO)
-    # site-A (live) and site-B (DR) data VIPs, and the partner-facing ext VIPs
-    assert ("pcmk-vip-a.client.com", "10.10.1.200") in vips
-    assert ("pcmk-vip-b.client.com", "10.10.2.200") in vips
-    assert ("pcmk-vip-ext-a.client.com", "10.60.0.10") in vips
-    assert ("pcmk-vip-ext-b.client.com", "10.60.0.20") in vips
-    # rdqm has only a site-A VIP (no vip_b / vip_ext)
+    # site-A (live) and site-B (DR) data VIPs
     assert ("rdqm-vip-a.client.com", "10.10.1.100") in vips
-    assert not any(fqdn.startswith("rdqm-vip-b") for fqdn, _ in vips)
+    assert ("rdqm-vip-b.client.com", "10.10.2.100") in vips
+    # solo has only a site-A VIP (no vip_b)
+    assert ("solo-vip-a.client.com", "10.10.1.150") in vips
+    assert not any(fqdn.startswith("solo-vip-b") for fqdn, _ in vips)
     # NHAU has no vip, "weird" has no short -> neither contributes
     assert not any(fqdn.startswith("nhau") for fqdn, _ in vips)
     assert "10.10.1.99" not in {ip for _, ip in vips}
@@ -114,7 +105,7 @@ def test_forward_zones_a_records_cname_and_vips():
     # base name CNAMEs to the data-plane (primary) interface, not mgmt/ext
     assert Record("qm-a1.client.com", "CNAME", "qm-a1-data-a.client.com") in client
     # VIP service names land in the client zone
-    assert Record("pcmk-vip-a.client.com", "A", "10.10.1.200") in client
+    assert Record("rdqm-vip-a.client.com", "A", "10.10.1.100") in client
     # counterparty records land in service.com; its primary is net-ext (no data)
     svc = fwd["service.com"]
     assert Record("svc-sim-ext.service.com", "A", "10.60.0.50") in svc
@@ -139,7 +130,7 @@ def test_reverse_zones_group_by_slash24_and_span_orgs_on_shared_planes():
     assert Record("50.0.60.10.in-addr.arpa", "PTR", "svc-sim-ext.service.com") in ext
     # a VIP gets a PTR too
     assert (
-        Record("200.1.10.10.in-addr.arpa", "PTR", "pcmk-vip-a.client.com")
+        Record("100.1.10.10.in-addr.arpa", "PTR", "rdqm-vip-a.client.com")
         in rev["1.10.10.in-addr.arpa"]
     )
 
@@ -158,7 +149,7 @@ def test_real_topology_forward_zones():
     for i, host in enumerate(("nha-ubuntu-a1", "nha-ubuntu-a2", "nha-ubuntu-a3"), start=1):
         assert Record(f"{host}-data-a.client.com", "A", f"10.10.1.1{i}") in client
     # a VIP service name
-    assert Record("pcmk-vip-a.client.com", "A", "10.10.1.200") in client
+    assert Record("rdqm-vip-a.client.com", "A", "10.10.1.100") in client
     # the counterparty + its mock nameserver are in service.com (primary = ext)
     svc = fwd["service.com"]
     assert Record("svc-sim-ext.service.com", "A", "10.60.0.50") in svc

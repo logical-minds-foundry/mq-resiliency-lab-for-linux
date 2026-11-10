@@ -44,10 +44,11 @@ def test_needed_local_boxes_resolves_fat_boxes(monkeypatch):
             "obs": {"box": "obs-ubuntu26"},
             "infra-client": {"box": "infra-ubuntu26"},
             "nha-rhel-crr-a1": {"box": "mq-nativeha-rhel9"},
-            "san-a": {"box": "cloud-image/ubuntu-24.04"},  # a cloud box: nothing to build
+            "infra-svc": {"box": "cloud-image/ubuntu-24.04"},  # a cloud box: nothing to build
         },
     )
-    needed = cli._needed_local_boxes(["rdqm-a1", "obs", "infra-client", "nha-rhel-crr-a1", "san-a"])
+    guests = ["rdqm-a1", "obs", "infra-client", "nha-rhel-crr-a1", "infra-svc"]
+    needed = cli._needed_local_boxes(guests)
     assert needed == ["infra-ubuntu26", "mq-nativeha-rhel9", "mq-rdqm-rhel9", "obs-ubuntu26"]
 
 
@@ -60,8 +61,6 @@ def test_fleet_builders_cover_base_and_fat_boxes():
         "mq-client-ubuntu26",
         "mq-nativeha-rhel9",
         "mq-nativeha-ubuntu24",
-        "pcmk-ubuntu24",
-        "san-ubuntu26",
     ):
         assert box.FLEET[fat].builder == "lab/boxes/build-fatbox.sh"
     # The standalone logsearch-ubuntu2404 box was retired (#1179) — folded into obs.
@@ -460,27 +459,15 @@ def test_manifest_hash_covers_nativeha_rhel_box():
     assert h != _manifest_hash("mq-rdqm-rhel9")  # its own bake playbook enters the hash
 
 
-def test_manifest_hash_covers_ubuntu_ha_boxes():
-    # #103 T6/T7: mq-nativeha-ubuntu24 -> nativeha-ubuntu and pcmk-ubuntu24 -> pcmk-ubuntu
+def test_manifest_hash_covers_ubuntu_mq_boxes():
+    # #103 T6: mq-nativeha-ubuntu26 -> nativeha-ubuntu and mq-client-ubuntu26 -> mq-ubuntu
     # each digest their own bake playbook + role closure — a deterministic 64-char,
-    # box-specific hash.
-    for name in ("mq-nativeha-ubuntu24", "pcmk-ubuntu24"):
+    # box-specific hash (same OS, so only the bake tells them apart).
+    for name in ("mq-nativeha-ubuntu26", "mq-client-ubuntu26"):
         h = _manifest_hash(name)
         assert len(h) == 64
         assert h == _manifest_hash(name)  # deterministic
-    assert _manifest_hash("mq-nativeha-ubuntu24") != _manifest_hash("pcmk-ubuntu24")
-
-
-def test_fleet_has_the_baked_san_box():
-    """#1278 (spec §4.7.1): the SAN targets' box is a host-resolved fat box on the infra
-    OS, baked by ansible/bake-san.yml, not MQ-bearing, with its own manifest hash."""
-    spec = box._build_fleet(_X86)["san-ubuntu26"]
-    assert (spec.role, spec.bake_stem, spec.mq_bearing) == ("san", "san", False)
-    assert spec.os.arch_pin is None and spec.has_manifest_hash
-    assert box._build_fleet(_ARM)["san-ubuntu26"].arch == AARCH64
-    h = _manifest_hash("san-ubuntu26")
-    assert len(h) == 64 and h == _manifest_hash("san-ubuntu26")
-    assert h != _manifest_hash("pcmk-ubuntu24")
+    assert _manifest_hash("mq-nativeha-ubuntu26") != _manifest_hash("mq-client-ubuntu26")
 
 
 def _hash_with(*args: str) -> subprocess.CompletedProcess[str]:
@@ -730,7 +717,7 @@ def test_manifest_hash_stable_on_no_op_and_unbaked_role(tmp_path):
 # box). The fix folds the pin CONTENT into the digest, but ONLY for the        #
 # MQ-bearing boxes (those that bake an MQ install: mq-nativeha-rhel9,          #
 # mq-nativeha-ubuntu24, mq-client-ubuntu26, mq-rdqm-rhel9); the MQ-version-           #
-# independent commons boxes (obs/infra, pcmk) must stay REUSE across          #
+# independent commons boxes (obs/infra) must stay REUSE across                #
 # a pin bump so a version change doesn't spuriously rebake them.               #
 # --------------------------------------------------------------------------- #
 def _fake_bake_repo_with_pin(tmp_path: Path) -> Path:

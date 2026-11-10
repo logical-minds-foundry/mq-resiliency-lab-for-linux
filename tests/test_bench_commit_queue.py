@@ -6,7 +6,7 @@ This pins the fix:
 
 - the wrapper's queue is BENCH.COMMIT, and both Native HA arms define it;
 - nativeha-ubuntu grants mqapp +put +inq on it, from a list kept apart from the shared
-  authz_grants (the pcmk/rdqm arms, which never define BENCH.COMMIT, must not
+  authz_grants (the rdqm arm, which never defines BENCH.COMMIT, must not
   setmqaut it), and no other playbook loops over that list;
 - APP.REPLY's posture is unchanged: mqapp still has no +put there.
 """

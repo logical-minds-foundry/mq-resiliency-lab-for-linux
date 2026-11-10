@@ -27,8 +27,6 @@ if TYPE_CHECKING:
 # mechanism+os_family so a new stack needs no separate folder literal — the folder title
 # is "<mechanism label> (<OS label>)", e.g. "Native HA (RHEL)".
 _MECH_LABEL = {
-    "pacemaker-san": "PCMK",
-    "pacemaker-drbd": "PCMK-DRBD",
     "rdqm": "RDQM",
     "native-ha": "Native HA",
 }
@@ -55,21 +53,17 @@ def dashboard_folder_for(mechanism: str, os_family: str) -> str:
 @dataclass(frozen=True)
 class QmConfig:
     """A stack's queue-manager identity (#109): the QM name, its internal data-plane
-    VIP, its partner-facing (net-ext) VIP for the inter-business link (#146), and —
-    when this QM talks to a counterparty — that counterparty's CONNAME (#147).
+    VIP, and — when this QM talks to a counterparty — that counterparty's CONNAME (#147).
+    RDQM allows only one floating IP per QM (#216 spike), so the partner reaches the QM
+    by per-node CONNAME list.
 
-    `vip_ext` is optional: the Pacemaker stack binds it as a second VIP on the QM
-    resource group, but RDQM allows only one floating IP per QM (#216 spike), so the
-    RDQM stack omits it and the partner reaches the QM by per-node CONNAME list.
-
-    `vip` is optional too: Native HA (#246) has no floating IP at all — clients
+    `vip` is optional: Native HA (#246) has no floating IP at all — clients
     reach the active instance via a multi-instance CONNAME list — so its stacks
     omit `vip` entirely."""
 
     name: str
     short: str = ""
     vip: str = ""
-    vip_ext: str = ""
     svc_conn: str | None = None
     svc: str = ""
 
@@ -102,15 +96,14 @@ class Stack:
 
     Fields:
         name:          stack key as it appears in topology.yaml's stacks: block.
-        mechanism:     HA/DR mechanism string (e.g. "pacemaker-san", "rdqm", "native-ha").
+        mechanism:     HA/DR mechanism string (e.g. "rdqm", "native-ha").
         os_family:     base OS family ("ubuntu" or "rhel"); the major comes from the
                        version layer (lab/versions.yaml, epic .github#280).
         short:         4-char uppercase token; QM names derive from this (#351).
         verbs:         per-verb dispatch dict (raw from YAML; commands/playbooks).
-        cluster_group: Ansible group name for the cluster nodes (e.g. "pcmk_a", "rdqm_a").
-                       This is the correct probe target for qm-status — NOT groups[0], which
-                       may be a SAN host with no Pacemaker/MQ tooling. None for reserved stacks.
-        groups:        ordered list of atomic group names (site-A + site-B + SANs).
+        cluster_group: Ansible group name for the cluster nodes (e.g. "rdqm_a").
+                       This is the probe target for qm-status. None for reserved stacks.
+        groups:        ordered list of atomic group names (site-A + site-B).
         dr_groups:     the DR (site-B) groups this stack's `groups` includes — the ones a
                        `bootstrap --no-dr` skips (#188). Empty for a stack that does not
                        support HA-only bring-up; its non-empty presence is the marker.
@@ -191,7 +184,6 @@ def _qm_from_stack(short: str, qm_cfg: dict[str, Any], svc_name: str, svc_conn: 
         name=f"{short}APP",
         short=short,
         vip=qm_cfg.get("vip", ""),
-        vip_ext=qm_cfg.get("vip_ext", ""),
         svc_conn=svc_conn,
         svc=svc_name,
     )

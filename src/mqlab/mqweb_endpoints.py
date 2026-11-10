@@ -4,7 +4,7 @@ Each QM's admin REST/Console (Liberty, 9443/HTTPS) is a data-plane infrastructur
 surface reached at the QM's service address, published for BOTH sites (the endpoint
 must be known on whichever site is live after a DR cutover):
 
-- pcmk / RDQM -> the data-plane VIP per site (vip / vip_b).
+- RDQM        -> the data-plane VIP per site (vip / vip_b).
 - Native HA   -> the active instance's data-plane node IP, resolved at runtime among
                  each site's candidate nodes (no VIP exists).
 - svc-sim     -> the counterparty, over net-ext (lab-only; outside "our data plane").

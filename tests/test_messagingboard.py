@@ -13,14 +13,14 @@ def _exprs(board: dict) -> list[str]:
 
 
 def test_board_is_per_stack_parameterized_with_no_cross_stack_leak():
-    d = render_messaging_board("pcmk-ubuntu", "PCMK", "PCMKAPP", "SVCQM", "PCMK.SVC.REQUEST")
+    d = render_messaging_board("nativeha-ubuntu", "NHAU", "NHAUAPP", "SVCQM", "NHAU.SVC.REQUEST")
     blob = json.dumps(d)
-    assert d["uid"] == "lab-messaging-pcmk-ubuntu"
-    assert "messaging" in d["tags"] and "pcmk-ubuntu" in d["tags"]
-    assert "PCMKAPP" in blob and "SVCQM" in blob
-    assert "PCMKAPP.SVCQM" in blob  # the flow-strip SDR hop is <app>.<svc>
+    assert d["uid"] == "lab-messaging-nativeha-ubuntu"
+    assert "messaging" in d["tags"] and "nativeha-ubuntu" in d["tags"]
+    assert "NHAUAPP" in blob and "SVCQM" in blob
+    assert "NHAUAPP.SVCQM" in blob  # the flow-strip SDR hop is <app>.<svc>
     # a different stack's board never carries this stack's app QM
-    assert "PCMKAPP" not in json.dumps(
+    assert "NHAUAPP" not in json.dumps(
         render_messaging_board("rdqm-rhel", "RDQM", "RDQMAPP", "SVCQM", "RDQM.SVC.REQUEST")
     )
 
@@ -29,9 +29,9 @@ def test_flow_strip_depth_tile_uses_the_per_stack_request_queue():
     # each board's SVC.REQUEST depth reflects THIS stack's own queue on the shared
     # SVCQM, not a summed shared queue (#446 — the observability 1b buys back).
     exprs = _exprs(
-        render_messaging_board("pcmk-ubuntu", "PCMK", "PCMKAPP", "SVCQM", "PCMK.SVC.REQUEST")
+        render_messaging_board("nativeha-ubuntu", "NHAU", "NHAUAPP", "SVCQM", "NHAU.SVC.REQUEST")
     )
-    assert any('ibmmq_queue_depth{qmgr="SVCQM",queue="PCMK.SVC.REQUEST"}' in e for e in exprs)
+    assert any('ibmmq_queue_depth{qmgr="SVCQM",queue="NHAU.SVC.REQUEST"}' in e for e in exprs)
 
 
 def test_status_band_is_flow_indicators_not_depth_sum():
@@ -74,7 +74,7 @@ def test_logs_panel_covers_both_app_and_svc_units():
 def test_board_has_a_per_stack_mq_events_panel():
     # A dedicated MQ-instrumentation-events panel (#517): the {unit="mq-events"} JSON stream
     # (separate from the logs), scoped to THIS stack's objects via eventSource.objectName.
-    d = render_messaging_board("pcmk-ubuntu", "PCMK", "PCMKAPP", "SVCQM", "PCMK.SVC.REQUEST")
+    d = render_messaging_board("nativeha-ubuntu", "NHAU", "NHAUAPP", "SVCQM", "NHAU.SVC.REQUEST")
     ev = [
         p
         for p in d["panels"]
@@ -84,13 +84,13 @@ def test_board_has_a_per_stack_mq_events_panel():
     expr = ev[0]["targets"][0]["expr"]
     assert "| json" in expr  # parse the event JSON
     assert "eventSource_objectName" in expr  # filter by the affected object (queue/channel/QM)
-    assert "PCMKAPP" in expr and "SVCQM" in expr  # scoped to this stack's QMs
+    assert "NHAUAPP" in expr and "SVCQM" in expr  # scoped to this stack's QMs
     # cross-stack: a different stack's events panel never carries this stack's app QM
     other = render_messaging_board("rdqm-rhel", "RDQM", "RDQMAPP", "SVCQM", "RDQM.SVC.REQUEST")
     other_ev = next(
         p for p in other["panels"] if p["type"] == "logs" and "mq-events" in p["targets"][0]["expr"]
     )
-    assert "PCMKAPP" not in other_ev["targets"][0]["expr"]
+    assert "NHAUAPP" not in other_ev["targets"][0]["expr"]
 
 
 def test_flow_strip_channel_tiles_use_status_squash():
@@ -106,12 +106,12 @@ def test_drilldown_seam_links_queue_and_channel_rows():
 
 
 def test_dashboard_path_is_per_stack():
-    assert messaging_dashboard_path("pcmk-ubuntu").name == "lab-messaging-pcmk-ubuntu.json"
+    assert messaging_dashboard_path("nativeha-ubuntu").name == "lab-messaging-nativeha-ubuntu.json"
 
 
 def _stack_cfg(short, provision):
     return {
-        "mechanism": "pacemaker-san",
+        "mechanism": "native-ha",
         "os_family": "ubuntu",
         "short": short,
         "provision": provision,

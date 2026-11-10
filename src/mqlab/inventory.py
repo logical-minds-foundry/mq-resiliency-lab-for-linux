@@ -4,8 +4,8 @@ The inventory is the full declarative *map* of every host — not a snapshot of 
 is running (liveness lives in the verb pre-flight, #99/#102). One source of truth
 (topology), one grouping namespace: atomic role×site groups, plus each stack
 rendered as an Ansible `:children` parent group (#350). The stack-aggregate group
-name is the stack name with hyphens→underscores (`pcmk-ubuntu` → `pcmk_ubuntu`),
-so a provision playbook can target `hosts: pcmk_ubuntu` and reach the union of that
+name is the stack name with hyphens→underscores (`rdqm-rhel` → `rdqm_rhel`),
+so a provision playbook can target `hosts: rdqm_rhel` and reach the union of that
 stack's atomic groups. Reserved stacks with no groups (e.g. nativeha-ubuntu) emit
 no aggregate. (underscore names = groups, hyphens = hosts.)
 """

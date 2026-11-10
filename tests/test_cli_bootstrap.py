@@ -46,41 +46,40 @@ TOPO = (
     # nodes carry a net-mgmt IP so lab_inventory() renders ansible_host (the
     # bootstrap now refreshes the inventory — #377).
     "nodes:\n"
-    "  san-a: {box: san, nics: {net-mgmt: 10.50.0.10}}\n"
-    "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
-    "  pcmk-a2: {box: pcmk, nics: {net-mgmt: 10.50.0.52}}\n"
-    "  pcmk-a3: {box: pcmk, nics: {net-mgmt: 10.50.0.53}}\n"
-    "  pcmk-b1: {box: pcmk, nics: {net-mgmt: 10.50.0.61}}\n"
+    "  nha-ubuntu-a1: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.11}}\n"
+    "  nha-ubuntu-a2: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.12}}\n"
+    "  nha-ubuntu-a3: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.13}}\n"
+    "  nha-ubuntu-b1: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.14}}\n"
+    "  nha-ubuntu-b2: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.15}}\n"
     "  obs: {box: obs, nics: {net-mgmt: 10.50.0.2}}\n"
     "  mon-probe: {box: mq-client, nics: {net-mgmt: 10.50.0.3}}\n"
     "  svc-sim: {box: mq-client, nics: {net-mgmt: 10.50.0.50}}\n"
     "  app-client: {box: mq-client, nics: {net-mgmt: 10.50.0.40}}\n"
     "groups:\n"
-    "  san_a:   [san-a]\n"
-    "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
-    "  pcmk_b:  [pcmk-b1]\n"
+    "  nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2, nha-ubuntu-a3]\n"
+    "  nha_ubuntu_b: [nha-ubuntu-b1, nha-ubuntu-b2]\n"
     "  obs_box: [obs]\n"
     "  probe:   [mon-probe]\n"
     "  svc:     [svc-sim]\n"
     "  app:     [app-client]\n"
     "stacks:\n"
-    "  pcmk-ubuntu:\n"
-    "    mechanism: pacemaker-san\n"
+    "  nativeha-ubuntu:\n"
+    "    mechanism: native-ha\n"
     "    os_family: ubuntu\n"
-    "    short: PCMK\n"
-    "    cluster_group: pcmk_a\n"
-    "    groups: [san_a, pcmk_a, pcmk_b]\n"
-    "    dr_groups: [pcmk_b]\n"
-    "    provision: ansible/site-pcmk.yml\n"
-    "    secrets: [pcmk_hacluster_password, mqweb_admin_password]\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
+    "    short: NHAU\n"
+    "    cluster_group: nha_ubuntu_a\n"
+    "    groups: [nha_ubuntu_a, nha_ubuntu_b]\n"
+    "    dr_groups: [nha_ubuntu_b]\n"
+    "    provision: ansible/site-nativeha-ubuntu.yml\n"
+    "    secrets: [mqweb_aes_passphrase, mqweb_admin_password]\n"
+    "    qm: { svc_conn: 10.60.0.50 }\n"
     "    alloc:\n"
     "      exporter_app_port: 9157\n"
     "      exporter_svc_port: 9158\n"
-    "      app_unit: app-pcmk\n"
+    "      app_unit: app-nhau\n"
     "      svc_port: 1414\n"
     "    verbs:\n"
-    "      qm-status:  { pcs: 'status resources' }\n"
+    "      qm-status:  { cmd: 'dspmq -m {qm}' }\n"
     "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
     "commons:\n"
     "  groups: [obs_box, probe, svc, app]\n"
@@ -103,11 +102,11 @@ def _seed(monkeypatch, tmp_path, topo=TOPO):
 def _states(*, net=True, vms=True, provision=False, observe=False):
     nets = {"net-mgmt": "active", "net-data-a": "active"} if net else {}
     guests = [
-        "san-a",
-        "pcmk-a1",
-        "pcmk-a2",
-        "pcmk-a3",
-        "pcmk-b1",
+        "nha-ubuntu-a1",
+        "nha-ubuntu-a2",
+        "nha-ubuntu-a3",
+        "nha-ubuntu-b1",
+        "nha-ubuntu-b2",
         "obs",
         "mon-probe",
         "svc-sim",
@@ -173,7 +172,7 @@ def test_bootstrap_runs_from_first_unsatisfied(monkeypatch, tmp_path):
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)  # selection test: prereq-ensure is a separate concern
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0
     argv0s = [c.argv[0] for c in runner.recorded]
     # net phase (virsh net-*) skipped; provision + observe ran
@@ -196,7 +195,7 @@ def test_bootstrap_observe_provisions_the_consolidated_logsearch_tier(monkeypatc
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(24)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "observe"])
     assert result.exit_code == 0
     argv = [" ".join(c.argv) for c in runner.recorded]
     # site-obs.yml (now carrying the folded log-stack configure) runs, threading the
@@ -217,17 +216,17 @@ def test_no_dr_on_stack_without_dr_groups_fails_loud(monkeypatch, tmp_path):
 
 def test_no_dr_threads_into_phases_excluding_site_b(monkeypatch, tmp_path):
     # End-to-end: --no-dr on a dr_groups-bearing stack threads no_dr into the phase
-    # builders, so the vms phase brings up the site-A guests only (pcmk-b1 skipped).
+    # builders, so the vms phase brings up the site-A guests only (nha-ubuntu-b1 skipped).
     _seed(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states(net=True, vms=False))
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(24)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--no-dr"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--no-dr"])
     assert result.exit_code == 0
     up = [a for c in runner.recorded if c.argv[:2] == ["vagrant", "up"] for a in c.argv]
-    assert "pcmk-a1" in up  # HA site guest comes up
-    assert "pcmk-b1" not in up  # DR guest skipped end-to-end
+    assert "nha-ubuntu-a1" in up  # HA site guest comes up
+    assert "nha-ubuntu-b1" not in up  # DR guest skipped end-to-end
 
 
 def test_bootstrap_only_runs_one_phase(monkeypatch, tmp_path):
@@ -236,7 +235,7 @@ def test_bootstrap_only_runs_one_phase(monkeypatch, tmp_path):
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "provision"])
     assert result.exit_code == 0
     argv0s = [c.argv[0] for c in runner.recorded]
     # exactly the provision phase: render DNS, serve+point (site-dns), then the stack (#478)
@@ -249,7 +248,7 @@ def test_bootstrap_from_runs_phase_onward(monkeypatch, tmp_path):
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--from", "provision"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--from", "provision"])
     assert result.exit_code == 0
     argv0s = [c.argv[0] for c in runner.recorded]
     assert "ansible-playbook" in argv0s  # provision + observe
@@ -266,7 +265,7 @@ def test_bootstrap_all_satisfied_is_a_noop(monkeypatch, tmp_path):
     )
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0
     assert runner.recorded == []  # nothing to do
 
@@ -310,7 +309,7 @@ def test_bootstrap_ensures_prereqs_per_selected_phase(monkeypatch, tmp_path):
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     ensured = _record_ensures(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0
     # net+vms satisfied -> only provision + observe selected -> ensured for each
     assert ensured == ["provision", "observe"]
@@ -322,7 +321,7 @@ def test_bootstrap_only_observe_ensures_only_observe(monkeypatch, tmp_path):
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     ensured = _record_ensures(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "observe"])
     assert result.exit_code == 0
     assert ensured == ["observe"]
 
@@ -338,18 +337,9 @@ def test_bootstrap_only_net_ensures_nothing(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: calls.append("boxes"))
     monkeypatch.setattr(cli, "_galaxy_install_step", lambda **_: calls.append("galaxy"))  # type: ignore[arg-type]
     monkeypatch.setattr(cli, "_pki_ensure_step", lambda **_: calls.append("pki"))  # type: ignore[arg-type]
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "net"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "net"])
     assert result.exit_code == 0
     assert calls == []  # net phase has no prerequisites
-
-
-# --------------------------------------------------------------------------- #
-# The SAN targets boot the baked san box (#1278, spec §4.7.1): no phase declares the
-# retired "san" deb pre-cache prereq kind, and the sequencer has no dispatch for it.
-# --------------------------------------------------------------------------- #
-def test_bootstrap_declares_no_san_prereq():
-    assert all("san" not in p.ensure for p in PHASES)
-    assert not hasattr(cli, "_ensure_san_debs_for_stack")
 
 
 def test_provision_dispatch_runs_mq_galaxy_and_pki_only(monkeypatch, tmp_path):
@@ -361,16 +351,16 @@ def test_provision_dispatch_runs_mq_galaxy_and_pki_only(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_execute", lambda *a, **k: calls.append("execute"))
     monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: calls.append("verify-galaxy"))
     provision = next(p for p in PHASES if p.name == "provision")
-    cli._ensure_prereqs_for_stack(cli.lab_stacks()["pcmk-ubuntu"], provision, step=False)
+    cli._ensure_prereqs_for_stack(cli.lab_stacks()["nativeha-ubuntu"], provision, step=False)
     assert calls == ["mq", "execute", "verify-galaxy"]
 
 
 # --------------------------------------------------------------------------- #
-# provision secret injection (#373: the #350 cutover dropped it -> hacluster
-# password came up empty and chpasswd failed on the cluster nodes)
+# provision secret injection (#373: the #350 cutover dropped it -> the stack's
+# secrets came up empty on the cluster nodes)
 #
 # The provision playbook's roles read secrets from the environment (e.g.
-# PCMK_HACLUSTER_PASSWORD via lookup('env', ...)). The sequencer resolves
+# MQWEB_AES_PASSPHRASE via lookup('env', ...)). The sequencer resolves
 # stack.secrets via lab-secret.sh and exports them (uppercased) before provision.
 # --------------------------------------------------------------------------- #
 def test_provision_injects_stack_secrets(monkeypatch, tmp_path):
@@ -386,10 +376,10 @@ def test_provision_injects_stack_secrets(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "provision"])
     assert result.exit_code == 0
     # both of the stack's secrets are sourced, in order, and exported uppercased
-    assert sourced == ["pcmk_hacluster_password", "mqweb_admin_password"]
+    assert sourced == ["mqweb_aes_passphrase", "mqweb_admin_password"]
     for name in sourced:  # exported under the uppercased name with the sourced value
         assert os.environ[name.upper()] == f"v-{name}"
         monkeypatch.delenv(name.upper(), raising=False)
@@ -408,11 +398,11 @@ def test_provision_exports_the_mqweb_state_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "provision"])
     assert result.exit_code == 0
     assert os.environ["MQWEB_STATE_DIR"] == str(paths.state("mqweb"))
     assert os.environ["MQWEB_STATE_DIR"] == str(tmp_path / "build" / "state" / "mqweb")
-    for name in ("pcmk_hacluster_password", "mqweb_admin_password"):
+    for name in ("mqweb_aes_passphrase", "mqweb_admin_password"):
         monkeypatch.delenv(name.upper(), raising=False)
 
 
@@ -424,7 +414,7 @@ def test_non_provision_phase_exports_no_mqweb_state_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "observe"])
     assert result.exit_code == 0
     assert os.environ["MQWEB_STATE_DIR"] == "untouched"
 
@@ -437,7 +427,7 @@ def test_non_provision_phase_sources_no_secrets(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "observe"])
     assert result.exit_code == 0
     assert sourced == []  # observe doesn't touch the cluster/QM secrets
 
@@ -445,21 +435,21 @@ def test_non_provision_phase_sources_no_secrets(monkeypatch, tmp_path):
 def test_source_secret_returns_trimmed_value(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     runner = RecordingRunner(results=[ScriptedResult(["  topsecret  "])])
-    value = cli._source_secret(_deps(runner), "pcmk_hacluster_password")
+    value = cli._source_secret(_deps(runner), "mqweb_aes_passphrase")
     assert value == "topsecret"
-    assert runner.recorded[0].argv[-1] == "pcmk_hacluster_password"  # lab-secret.sh <name>
+    assert runner.recorded[0].argv[-1] == "mqweb_aes_passphrase"  # lab-secret.sh <name>
 
 
 def test_source_secret_exits_loud_on_failure(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     runner = RecordingRunner(results=[ScriptedResult(["boom"], exit_code=1)])
     with pytest.raises(typer.Exit):
-        cli._source_secret(_deps(runner), "pcmk_hacluster_password")
+        cli._source_secret(_deps(runner), "mqweb_aes_passphrase")
 
 
 # --------------------------------------------------------------------------- #
 # inventory refresh (#377: provision ran against a STALE inventory missing the
-# #350 stack-aggregate groups -> hosts: pcmk_ubuntu plays silently no-op'd)
+# #350 stack-aggregate groups -> hosts: nativeha_ubuntu plays silently no-op'd)
 # --------------------------------------------------------------------------- #
 def test_bootstrap_renders_inventory_with_aggregate_group(monkeypatch, tmp_path):
     from mqlab.inventory import inventory_path
@@ -470,11 +460,11 @@ def test_bootstrap_renders_inventory_with_aggregate_group(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"secret-{name}")
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "provision"])
     assert result.exit_code == 0
     # the bootstrap must (re)render a fresh inventory carrying the stack-aggregate
     # group the cutover playbooks target (the stale-inventory bug fixed by #377)
-    assert "[pcmk_ubuntu:children]" in inventory_path().read_text()
+    assert "[nativeha_ubuntu:children]" in inventory_path().read_text()
 
 
 # --------------------------------------------------------------------------- #
@@ -486,7 +476,7 @@ def _phase(name):
 
 def test_ensure_for_stack_vms_pulls_boxes_and_mq(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     calls: list[str] = []
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
     monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: calls.append("boxes"))
@@ -509,7 +499,7 @@ def _capture_execute(monkeypatch):
 
 def test_ensure_for_stack_provision_pulls_galaxy_mq_pki(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     mq: list[str] = []
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: mq.append("mq"))
     monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
@@ -549,7 +539,7 @@ def test_verify_galaxy_collections_hard_fails_when_missing(monkeypatch, tmp_path
 
 def test_ensure_for_stack_observe_pulls_only_pki(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     monkeypatch.setattr(
         cli, "_ensure_mq_artifacts_for_stack", lambda s: pytest.fail("no mq for observe")
     )
@@ -564,7 +554,7 @@ def test_ensure_for_stack_observe_pulls_only_pki(monkeypatch, tmp_path):
 
 def test_ensure_for_stack_net_pulls_nothing(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     monkeypatch.setattr(cli, "_execute", lambda *a, **k: pytest.fail("net runs no ensure steps"))
     monkeypatch.setattr(
         cli, "_ensure_mq_artifacts_for_stack", lambda s: pytest.fail("net runs no mq ensure")
@@ -725,18 +715,21 @@ def test_reconcile_forgets_a_retired_box_even_without_a_resolved_box(monkeypatch
     topology has no box for it (the plain repoint check needs one to compare against)."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     monkeypatch.setattr(cli, "_resolved_nodes", dict)
-    _make_box_meta(tmp_path, "pcmk-a1", "pcmk-ubuntu")
-    _make_box_meta(tmp_path, "pcmk-a2", "pcmk-ubuntu24")  # a current name, nothing to compare
-    assert cli._stale_box_meta_guests(["pcmk-a1", "pcmk-a2", "pcmk-a3"]) == ["pcmk-a1"]
+    _make_box_meta(tmp_path, "nha-ubuntu-a1", "mq-nativeha-ubuntu")
+    # a current name, nothing to compare
+    _make_box_meta(tmp_path, "nha-ubuntu-a2", "mq-nativeha-ubuntu24")
+    guests = ["nha-ubuntu-a1", "nha-ubuntu-a2", "nha-ubuntu-a3"]
+    assert cli._stale_box_meta_guests(guests) == ["nha-ubuntu-a1"]
 
 
 def test_stack_mq_boxes_resolves_cluster_node_boxes(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
-    # The pcmk-ubuntu cluster nodes resolve to the stack's pcmk box (catalog default).
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
+    # The nativeha-ubuntu cluster nodes resolve to the stack's mq-nativeha box (catalog
+    # default).
     cat = load_catalog()
     names = {b.name for b in cli._stack_mq_boxes(stack)}
-    assert cat.box("pcmk", cat.default_os("pcmk-ubuntu")).name in names
+    assert cat.box("mq-nativeha", cat.default_os("nativeha-ubuntu")).name in names
     assert all(b.os.ref.family == "ubuntu" for b in cli._stack_mq_boxes(stack))
 
 
@@ -746,7 +739,7 @@ def test_stack_mq_boxes_includes_commons_svc_app(monkeypatch, tmp_path):
     box's tarball must be ensured even when no cluster node shares it. Regression
     for the cold-cache miss on svc-sim's UbuntuLinuxX64 tarball (#407)."""
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     # A box no cluster node uses — only the commons set contributes it.
     cat = load_catalog()
     commons_only = cat.box("obs", cat.infra)
@@ -756,10 +749,10 @@ def test_stack_mq_boxes_includes_commons_svc_app(monkeypatch, tmp_path):
 
 def test_ensure_mq_artifacts_for_stack_delegates(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     captured: dict[str, object] = {}
     cat = load_catalog()
-    boxes = {cat.box("pcmk", cat.infra)}
+    boxes = {cat.box("mq-nativeha", cat.infra)}
     monkeypatch.setattr(cli, "_stack_mq_boxes", lambda s: boxes)
     monkeypatch.setattr(cli, "mq_cache_dir", lambda: tmp_path / "mqcache")
     monkeypatch.setattr(
@@ -808,7 +801,7 @@ INFRA_TOPO = (
     "    cluster_group: rdqm_a\n"
     "    groups: [rdqm_a]\n"
     "    provision: ansible/site-rdqm.yml\n"
-    "    qm: { vip: 10.10.1.201, vip_ext: 10.60.0.11, svc_conn: 10.60.0.50 }\n"
+    "    qm: { vip: 10.10.1.201, svc_conn: 10.60.0.50 }\n"
     "    alloc:\n"
     "      exporter_app_port: 9159\n"
     "      exporter_svc_port: 9158\n"
@@ -859,7 +852,7 @@ def test_bootstrap_surfaces_cold_boot_notice(monkeypatch, tmp_path):
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     monkeypatch.setattr(cli.coldboot, "nudge", lambda: "NOTICE: this box is 40 days old.")
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0  # advisory — an old stamp never blocks the run
     assert "NOTICE: this box is 40 days old." in result.output
 
@@ -874,7 +867,7 @@ def test_bootstrap_silent_when_no_cold_boot_nudge(monkeypatch, tmp_path):
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     monkeypatch.setattr(cli.coldboot, "nudge", lambda: None)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0
     assert "NOTICE" not in result.output
 
@@ -889,9 +882,9 @@ def test_bootstrap_failure_prints_resume_hint(monkeypatch, tmp_path):
     runner = RecordingRunner(results=[ScriptedResult([], exit_code=2)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "provision"])
     assert result.exit_code == 2
-    assert "mqlab bootstrap pcmk-ubuntu --from provision" in result.output
+    assert "mqlab bootstrap nativeha-ubuntu --from provision" in result.output
     # A full-HADR run's hint must NOT carry --no-dr — resuming it would wrongly skip
     # the DR site the original run built (#1163).
     assert "--no-dr" not in result.output
@@ -902,7 +895,8 @@ def test_bootstrap_no_dr_failure_hint_carries_no_dr(monkeypatch, tmp_path):
     # ALSO carries --no-dr. Without it the operator's resume re-enters in full-HADR mode
     # and each phase re-targets the site-B guests this run never booted, failing
     # UNREACHABLE (#188) — the exact VAL-A path is `bootstrap nativeha-ubuntu --no-dr`.
-    # pcmk-ubuntu declares dr_groups: [pcmk_b], so --no-dr has a DR site to skip.
+    # nativeha-ubuntu declares dr_groups: [nha_ubuntu_b], so --no-dr has a DR site to
+    # skip.
     _seed(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
     # First provision step (render dns zones) fails (exit 2).
@@ -910,10 +904,10 @@ def test_bootstrap_no_dr_failure_hint_carries_no_dr(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)
     result = CliRunner().invoke(
-        cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision", "--no-dr"]
+        cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "provision", "--no-dr"]
     )
     assert result.exit_code == 2
-    assert "mqlab bootstrap pcmk-ubuntu --from provision --no-dr" in result.output
+    assert "mqlab bootstrap nativeha-ubuntu --from provision --no-dr" in result.output
 
 
 def test_bootstrap_no_tty_under_step_exits_2(monkeypatch, tmp_path):
@@ -924,7 +918,7 @@ def test_bootstrap_no_tty_under_step_exits_2(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps_pauser(runner, _FailPause()))
     _stub_ensure(monkeypatch)
     result = CliRunner().invoke(
-        cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe", "--step"]
+        cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "observe", "--step"]
     )
     assert result.exit_code == 2
 
@@ -957,9 +951,9 @@ def test_gate_allows_rhel_stack_on_x86(monkeypatch, tmp_path):
 
 
 def test_gate_allows_ubuntu_stack_on_aarch64(monkeypatch, tmp_path):
-    _seed(monkeypatch, tmp_path)  # this seed's stack is pcmk-ubuntu (os_family: ubuntu)
+    _seed(monkeypatch, tmp_path)  # this seed's stack is nativeha-ubuntu (os_family: ubuntu)
     monkeypatch.setattr(cli, "probe", lambda: ARM)
-    _real_gate(cli._lookup_stack_or_exit("pcmk-ubuntu"))  # Ubuntu runs on aarch64 — no raise
+    _real_gate(cli._lookup_stack_or_exit("nativeha-ubuntu"))  # Ubuntu runs on aarch64 — no raise
 
 
 def test_bootstrap_unknown_stack_exits_2(monkeypatch, tmp_path):
@@ -971,22 +965,22 @@ def test_bootstrap_unknown_stack_exits_2(monkeypatch, tmp_path):
 
 def test_bootstrap_unknown_from_phase_exits_2(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--from", "bogus"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--from", "bogus"])
     assert result.exit_code == 2
     assert "bogus" in result.output
 
 
 def test_bootstrap_unknown_only_phase_exits_2(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "bogus"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--only", "bogus"])
     assert result.exit_code == 2
     assert "bogus" in result.output
 
 
 def test_lookup_stack_or_exit_returns_stack(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
-    assert stack.name == "pcmk-ubuntu"
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
+    assert stack.name == "nativeha-ubuntu"
 
 
 def test_lookup_stack_or_exit_unknown(monkeypatch, tmp_path):
@@ -1019,45 +1013,50 @@ def _targets_json(port, health="up"):
 
 def test_probe_all_builds_states_dict(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     # 1: net-list, 2: list --all, 3: qm-status probe, 4: prometheus targets probe
     runner = RecordingRunner(
         results=[
             _net_listing({"net-mgmt": "active", "net-data-a": "active"}),
             _dom_listing(
                 dict.fromkeys(
-                    ["san-a", "pcmk-a1", "pcmk-a2", "pcmk-a3", "pcmk-b1", "obs", "mon-probe"],
+                    [
+                        "nha-ubuntu-a1",
+                        "nha-ubuntu-a2",
+                        "nha-ubuntu-a3",
+                        "nha-ubuntu-b1",
+                        "nha-ubuntu-b2",
+                        "obs",
+                        "mon-probe",
+                    ],
                     "running",
                 )
             ),
             # qm-status succeeds (emits a line, exercising the sink-less tee path) -> qm_up
-            ScriptedResult(["pcmk-a1 | CHANGED | rc=0 >>", "mq_group  Started"], exit_code=0),
+            ScriptedResult(["nha-ubuntu-a1 | CHANGED | rc=0 >>", "QMNAME(NHAUAPP)"], exit_code=0),
             _targets_json(9157),  # this stack's exporter is a healthy target
         ]
     )
     deps = _deps(runner)
     states = cli._probe_all(deps, stack)
     assert states["nets"]["net-mgmt"] == "active"
-    assert states["domains"]["lab_pcmk-a1"] == "running"
+    assert states["domains"]["lab_nha-ubuntu-a1"] == "running"
     assert states["qm_up"] is True
     assert states["observe"] is True
-    # The qm-status probe MUST target the cluster node group (pcmk_a), not
-    # groups[0] which is san_a — the SAN host that has no Pacemaker/MQ tooling.
-    # This assertion would FAIL against the old code that used stack.groups[0].
+    # The qm-status probe targets the stack's cluster node group (nha_ubuntu_a).
     qm_probe_cmd = runner.recorded[2]  # command 3 is the ansible qm-status call
-    assert "pcmk_a[0]" in qm_probe_cmd.argv, (
-        f"qm-status probe must target pcmk_a[0] (cluster group), "
-        f"not san_a[0] (SAN host); got argv={qm_probe_cmd.argv}"
+    assert "nha_ubuntu_a[0]" in qm_probe_cmd.argv, (
+        f"qm-status probe must target nha_ubuntu_a[0] (cluster group); got argv={qm_probe_cmd.argv}"
     )
 
 
-# The probe targets (#1212 gate): pcmk_a[0] for qm-status, obs_box for Prometheus.
-_PROBE_TARGETS_UP = {"pcmk-a1": "running", "obs": "running"}
+# The probe targets (#1212 gate): nha_ubuntu_a[0] for qm-status, obs_box for Prometheus.
+_PROBE_TARGETS_UP = {"nha-ubuntu-a1": "running", "obs": "running"}
 
 
 def test_probe_all_qm_down_when_status_nonzero(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     runner = RecordingRunner(
         results=[
             _net_listing({}),
@@ -1073,7 +1072,7 @@ def test_probe_all_qm_down_when_status_nonzero(monkeypatch, tmp_path):
 
 def test_probe_all_observe_false_when_port_absent(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     runner = RecordingRunner(
         results=[
             _net_listing({}),
@@ -1104,7 +1103,7 @@ def test_probe_all_skips_ssh_and_http_when_domains_down(monkeypatch, tmp_path):
     # load-tuned connect budget cost ~4 min) nor curl a missing Prometheus. Only the
     # two virsh probes run; both states are unsatisfied; each skip is logged.
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     runner = RecordingRunner(results=[_net_listing({}), _dom_listing({})])
     deps, buf = _deps_console(runner)
     states = cli._probe_all(deps, stack)
@@ -1113,10 +1112,10 @@ def test_probe_all_skips_ssh_and_http_when_domains_down(monkeypatch, tmp_path):
     assert len(runner.recorded) == 2
     assert not any(c.argv[0] in ("ansible", "curl") for c in runner.recorded)
     out = buf.getvalue()
-    assert "qm-status probe skipped: domain(s) not running: pcmk-a1" in out
+    assert "qm-status probe skipped: domain(s) not running: nha-ubuntu-a1" in out
     assert "observe probe skipped: domain(s) not running: obs" in out
     log = deps.transcript.path.read_text()
-    assert "qm-status probe skipped: domain(s) not running: pcmk-a1" in log
+    assert "qm-status probe skipped: domain(s) not running: nha-ubuntu-a1" in log
     assert "observe probe skipped: domain(s) not running: obs" in log
 
 
@@ -1124,11 +1123,11 @@ def test_probe_all_skips_only_the_probe_whose_target_is_down(monkeypatch, tmp_pa
     # Cluster node running, obs shut off: qm-status still runs and decides; the
     # observe probe is skipped (a "shut off" domain is not RUNNING).
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     runner = RecordingRunner(
         results=[
             _net_listing({}),
-            _dom_listing({"pcmk-a1": "running", "obs": "shut off"}),
+            _dom_listing({"nha-ubuntu-a1": "running", "obs": "shut off"}),
             ScriptedResult([], exit_code=0),  # qm-status runs -> up
         ]
     )
@@ -1141,8 +1140,9 @@ def test_probe_all_skips_only_the_probe_whose_target_is_down(monkeypatch, tmp_pa
 def test_probe_all_skips_qm_status_when_cluster_group_has_no_hosts(monkeypatch, tmp_path):
     # A cluster_group absent from topology has no target guest: nothing to SSH to,
     # so the probe is skipped with a logged reason rather than run against nothing.
-    _seed(monkeypatch, tmp_path, topo=TOPO.replace("cluster_group: pcmk_a", "cluster_group: ghost"))
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    topo = TOPO.replace("cluster_group: nha_ubuntu_a", "cluster_group: ghost")
+    _seed(monkeypatch, tmp_path, topo=topo)
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     runner = RecordingRunner(
         results=[_net_listing({}), _dom_listing(_PROBE_TARGETS_UP), _targets_json(9157)]
     )
@@ -1195,7 +1195,7 @@ def test_probe_all_qm_down_when_status_verb_but_no_cluster_group(monkeypatch, tm
         "groups: {}\n"
         "stacks:\n"
         "  edge-stack:\n"
-        "    mechanism: pacemaker-san\n"
+        "    mechanism: native-ha\n"
         "    os_family: ubuntu\n"
         "    short: EDGE\n"
         "    groups: []\n"
@@ -1204,7 +1204,7 @@ def test_probe_all_qm_down_when_status_verb_but_no_cluster_group(monkeypatch, tm
         "    qm: {}\n"
         "    alloc: {}\n"
         "    verbs:\n"
-        "      qm-status: { pcs: 'status resources' }\n"
+        "      qm-status: { cmd: 'dspmq -m {qm}' }\n"
         "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
@@ -1270,7 +1270,7 @@ def _run_perf_bootstrap(monkeypatch, tmp_path, runner, *args):
     deps, buf = _perf_deps(runner)
     monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
     _stub_ensure(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", *args])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", *args])
     return result, buf
 
 
@@ -1281,7 +1281,7 @@ def test_bootstrap_writes_a_perf_report_grouped_by_the_four_phases(
     assert result.exit_code == 0, result.output
     (path,) = _perf_reports(tmp_path)
     report = json.loads(path.read_text())
-    assert report["stack"] == "pcmk-ubuntu"
+    assert report["stack"] == "nativeha-ubuntu"
     # #1215: the pre-flight is on the perf clock, as its own phase ahead of the four.
     assert list(report["phases"]) == ["preflight", "net", "vms", "provision", "observe"]
     assert [s["label"] for s in report["phases"]["preflight"]["steps"]] == [
@@ -1290,26 +1290,26 @@ def test_bootstrap_writes_a_perf_report_grouped_by_the_four_phases(
     ]
     assert report["samples"][0]["host"]["self_busy"] == 20.0  # the Vergil VM's own reading
     ms = report["milestones"]
-    # 9 VMs in batches of 4: san-a is in batch 1, app-client alone in batch 3.
-    assert ms["boot:san-a"] == ms["boot:pcmk-a3"]
+    # 9 VMs in batches of 4: site A + nha-ubuntu-b1 in batch 1, app-client alone in batch 3.
+    assert ms["boot:nha-ubuntu-a1"] == ms["boot:nha-ubuntu-b1"]
     assert ms["boot_retries:app-client"] == 0
     assert ms["opensearch_green"] == pytest.approx(1241.136)
     assert "bootstrap completed" in report["notes"]
     assert report["samples"], "the sampler took at least its immediate sample"
     # the sampler covers every VM the stack brings up (members + commons)
     assert set(fake_perf_source.probed) == {
-        "san-a",
-        "pcmk-a1",
-        "pcmk-a2",
-        "pcmk-a3",
-        "pcmk-b1",
+        "nha-ubuntu-a1",
+        "nha-ubuntu-a2",
+        "nha-ubuntu-a3",
+        "nha-ubuntu-b1",
+        "nha-ubuntu-b2",
         "obs",
         "mon-probe",
         "svc-sim",
         "app-client",
     }
     out = buf.getvalue()
-    assert "Perf summary — pcmk-ubuntu" in out
+    assert "Perf summary — nativeha-ubuntu" in out
     assert f"perf report -> {path}" in out
 
 
@@ -1325,7 +1325,7 @@ def test_bootstrap_writes_the_perf_report_even_when_it_fails_partway(monkeypatch
     assert provision["failed"] == 1
     assert [s["ok"] for s in provision["steps"]][-1] is False
     assert "bootstrap FAILED in phase provision (exit 3)" in report["notes"]
-    assert "boot:pcmk-b1" not in report["milestones"]  # --no-dr: site-B never booted
+    assert "boot:nha-ubuntu-b1" not in report["milestones"]  # --no-dr: site-B never booted
 
 
 def test_a_perf_failure_never_fails_or_changes_the_bootstrap(monkeypatch, tmp_path):
@@ -1352,7 +1352,7 @@ def test_an_already_satisfied_bootstrap_still_reports_its_preflight(monkeypatch,
     deps, _ = _perf_deps(RecordingRunner())
     monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
     _stub_ensure(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     (path,) = _perf_reports(tmp_path)
     report = json.loads(path.read_text())
@@ -1372,7 +1372,7 @@ def test_a_failing_preflight_probe_is_timed_and_still_fails_the_bootstrap(monkey
     deps, _ = _perf_deps(RecordingRunner())
     monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
     _stub_ensure(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert isinstance(result.exception, RuntimeError)
     assert "virsh unreachable" in str(result.exception)
     (path,) = _perf_reports(tmp_path)
@@ -1411,7 +1411,7 @@ def test_bootstrap_reports_prereq_phases_and_runs_pki_once(monkeypatch, tmp_path
     )
     calls: list[str] = []
     _stub_prereq_helpers(monkeypatch, tmp_path, calls)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     (path,) = _perf_reports(tmp_path)
     report = json.loads(path.read_text())
@@ -1453,7 +1453,7 @@ def test_a_failing_prereq_is_timed_and_named_in_the_report(monkeypatch, tmp_path
         raise typer.Exit(code=5)
 
     monkeypatch.setattr(cli, "_ensure_local_boxes", box_build_fails)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 5
     (path,) = _perf_reports(tmp_path)
     report = json.loads(path.read_text())
@@ -1468,7 +1468,7 @@ def test_a_failing_prereq_is_timed_and_named_in_the_report(monkeypatch, tmp_path
 
 def test_ensure_once_per_run_kinds_skip_when_already_ensured(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: None)
     monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
     monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: None)
@@ -1482,7 +1482,7 @@ def test_ensure_once_per_run_kinds_skip_when_already_ensured(monkeypatch, tmp_pa
 
 def test_ensure_records_a_kind_only_after_it_succeeded(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
 
     def failing_execute(verb, steps, **_):
@@ -1497,7 +1497,7 @@ def test_ensure_records_a_kind_only_after_it_succeeded(monkeypatch, tmp_path):
 
 def test_ensure_stamps_the_prereq_phase_on_runner_steps(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    stack = cli._lookup_stack_or_exit("nativeha-ubuntu")
     monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
     seen: list[tuple[str, str, object]] = []
     monkeypatch.setattr(
@@ -1507,7 +1507,8 @@ def test_ensure_stamps_the_prereq_phase_on_runner_steps(monkeypatch, tmp_path):
             (s.label, s.phase, perf) for s in steps
         ),
     )
-    perf = cli_perfrun.BootstrapPerf(cli_perfrun.PerfRecord("pcmk-ubuntu", 0.0), _renderer_only())
+    record = cli_perfrun.PerfRecord("nativeha-ubuntu", 0.0)
+    perf = cli_perfrun.BootstrapPerf(record, _renderer_only())
     cli._ensure_prereqs_for_stack(stack, _phase("observe"), step=False, perf=perf)
     assert seen == [("pki ensure", "prereq:observe", perf.record)]
 
@@ -1525,18 +1526,13 @@ U26 = OsRef("ubuntu", 26)
 
 def _catalog_24_26(monkeypatch, tmp_path, *, unsupported_26=False):
     """Resolve the CLI's catalog against the committed one with a bare ubuntu:26 (no
-    lab decision), offered to pcmk-ubuntu; the Ubuntu defaults and infra_mq on 24."""
+    lab decision), offered to nativeha-ubuntu; its default and infra_mq on 24."""
     data = yaml.safe_load(REAL_CATALOG.read_text())
     entry: dict[str, object] = {"base_box": "cloud-image/ubuntu-26.04"}
     if unsupported_26:
         entry["ibm_support"] = {"status": "unsupported", "source": "spcr-row-pending"}
     data["os"]["ubuntu"][26] = entry
-    data["stacks"]["pcmk-ubuntu"] = {
-        "supported": ["ubuntu:24", "ubuntu:26"],
-        "default": "ubuntu:24",
-    }
     data["stacks"]["nativeha-ubuntu"]["default"] = "ubuntu:24"
-    data["stacks"]["pcmk-drbd-ubuntu"]["default"] = "ubuntu:24"
     data["infra_mq"] = "ubuntu:24"
     path = tmp_path / "versions-24-26.yaml"
     path.write_text(yaml.safe_dump(data))
@@ -1556,7 +1552,7 @@ def _build_file(tmp_path, text, name="b.yaml"):
 
 
 def _resume_harness(monkeypatch, tmp_path, *, live=False):
-    """A seeded pcmk-ubuntu bootstrap whose only remaining phase is observe."""
+    """A seeded nativeha-ubuntu bootstrap whose only remaining phase is observe."""
     _seed(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_stack_live", lambda name: live)
     monkeypatch.setattr(
@@ -1587,7 +1583,7 @@ def test_bootstrap_config_refused_before_any_lab_io(monkeypatch, tmp_path, prepa
 
 def test_bootstrap_bad_build_file_exits_2(monkeypatch, tmp_path, prepare_lab_calls):
     cfg = _build_file(tmp_path, "os: ubuntu:24\nmq: 9\n")
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--config", str(cfg)])
     assert result.exit_code == 2
     assert "unknown key 'mq'" in result.stderr
     assert prepare_lab_calls == []
@@ -1598,24 +1594,24 @@ def test_first_bootstrap_writes_the_record_before_the_render(monkeypatch, tmp_pa
     seen: list[InstanceRecord | None] = []
 
     def prepare() -> None:
-        seen.append(instances.read_record("pcmk-ubuntu"))
+        seen.append(instances.read_record("nativeha-ubuntu"))
 
     monkeypatch.setattr(cli, "_prepare_lab", prepare)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     [rec] = seen  # the record existed when _prepare_lab rendered
     assert rec is not None
-    assert (rec.stack, rec.os, rec.build_file) == ("pcmk-ubuntu", U26, None)
-    assert "pcmk-ubuntu: OS ubuntu:26 (instance record " in result.output
+    assert (rec.stack, rec.os, rec.build_file) == ("nativeha-ubuntu", U26, None)
+    assert "nativeha-ubuntu: OS ubuntu:26 (instance record " in result.output
 
 
 def test_first_bootstrap_with_config_records_the_selected_os(monkeypatch, tmp_path):
     _resume_harness(monkeypatch, tmp_path)
     _catalog_24_26(monkeypatch, tmp_path)
     cfg = _build_file(tmp_path, "os: ubuntu:26\n")
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--config", str(cfg)])
     assert result.exit_code == 0, result.output
-    rec = instances.read_record("pcmk-ubuntu")
+    rec = instances.read_record("nativeha-ubuntu")
     assert rec is not None
     assert (rec.os, rec.build_file) == (U26, str(cfg))
 
@@ -1626,11 +1622,12 @@ def test_bootstrap_config_matching_record_accepted_on_resume(monkeypatch, tmp_pa
     _resume_harness(monkeypatch, tmp_path, live=True)
     _catalog_24_26(monkeypatch, tmp_path)
     cfg = _build_file(tmp_path, "os: ubuntu:26\n", "same.yaml")
-    instances.write_record(InstanceRecord("pcmk-ubuntu", U26, str(cfg), "t"))
-    argv = ["bootstrap", "pcmk-ubuntu", "--from", "observe", "--config", str(cfg)]
+    instances.write_record(InstanceRecord("nativeha-ubuntu", U26, str(cfg), "t"))
+    argv = ["bootstrap", "nativeha-ubuntu", "--from", "observe", "--config", str(cfg)]
     result = CliRunner().invoke(cli.app, argv)
     assert result.exit_code == 0, result.output
-    assert instances.read_record("pcmk-ubuntu") == InstanceRecord("pcmk-ubuntu", U26, str(cfg), "t")
+    expected = InstanceRecord("nativeha-ubuntu", U26, str(cfg), "t")
+    assert instances.read_record("nativeha-ubuntu") == expected
 
 
 def test_bootstrap_config_conflicting_record_refused(monkeypatch, tmp_path, prepare_lab_calls):
@@ -1640,17 +1637,17 @@ def test_bootstrap_config_conflicting_record_refused(monkeypatch, tmp_path, prep
     _catalog_24_26(monkeypatch, tmp_path)
     probed: list[str] = []
     monkeypatch.setattr(cli, "_stack_live", lambda name: probed.append(name) or True)
-    instances.write_record(InstanceRecord("pcmk-ubuntu", U24, None, "t"))
+    instances.write_record(InstanceRecord("nativeha-ubuntu", U24, None, "t"))
     cfg = _build_file(tmp_path, "os: ubuntu:26\n")
-    argv = ["bootstrap", "pcmk-ubuntu", "--from", "provision", "--config", str(cfg)]
+    argv = ["bootstrap", "nativeha-ubuntu", "--from", "provision", "--config", str(cfg)]
     result = CliRunner().invoke(cli.app, argv)
     assert result.exit_code == 2
     assert (
-        "pcmk-ubuntu is running ubuntu:24; requested ubuntu:26; "
-        "run `mqlab teardown pcmk-ubuntu` first"
+        "nativeha-ubuntu is running ubuntu:24; requested ubuntu:26; "
+        "run `mqlab teardown nativeha-ubuntu` first"
     ) in result.stderr
     assert runner.recorded == [] and probed == [] and prepare_lab_calls == []
-    assert _recorded_os("pcmk-ubuntu") == U24
+    assert _recorded_os("nativeha-ubuntu") == U24
 
 
 def test_bootstrap_resume_without_config_keeps_the_recorded_os(monkeypatch, tmp_path):
@@ -1658,11 +1655,12 @@ def test_bootstrap_resume_without_config_keeps_the_recorded_os(monkeypatch, tmp_
     (ubuntu:24 here), which would refuse as a conflict or mislabel the stack."""
     _resume_harness(monkeypatch, tmp_path, live=True)
     _catalog_24_26(monkeypatch, tmp_path)
-    instances.write_record(InstanceRecord("pcmk-ubuntu", U26, "b.yaml", "t"))
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    instances.write_record(InstanceRecord("nativeha-ubuntu", U26, "b.yaml", "t"))
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
-    assert instances.read_record("pcmk-ubuntu") == InstanceRecord("pcmk-ubuntu", U26, "b.yaml", "t")
-    assert "pcmk-ubuntu: OS ubuntu:26" in result.output
+    expected = InstanceRecord("nativeha-ubuntu", U26, "b.yaml", "t")
+    assert instances.read_record("nativeha-ubuntu") == expected
+    assert "nativeha-ubuntu: OS ubuntu:26" in result.output
 
 
 @pytest.mark.parametrize(
@@ -1674,21 +1672,21 @@ def test_bootstrap_live_stack_without_record_refused(
     monkeypatch, tmp_path, prepare_lab_calls, flags
 ):
     runner = _resume_harness(monkeypatch, tmp_path, live=True)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", *flags])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", *flags])
     assert result.exit_code == 2
     assert (
-        "pcmk-ubuntu is running without a version record; run `mqlab teardown pcmk-ubuntu` "
+        "nativeha-ubuntu is running without a version record; run `mqlab teardown nativeha-ubuntu` "
         "and re-bootstrap"
     ) in result.stderr
     assert runner.recorded == [] and prepare_lab_calls == []
-    assert instances.read_record("pcmk-ubuntu") is None
+    assert instances.read_record("nativeha-ubuntu") is None
 
 
 def test_bootstrap_warns_on_an_ibm_unsupported_os(monkeypatch, tmp_path):
     _resume_harness(monkeypatch, tmp_path)
     _catalog_24_26(monkeypatch, tmp_path, unsupported_26=True)
     cfg = _build_file(tmp_path, "os: ubuntu:26\n")
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--config", str(cfg)])
     assert result.exit_code == 0, result.output
     assert (
         "WARNING: IBM does not support MQ on ubuntu:26 (spcr-row-pending); it is selectable "
@@ -1701,7 +1699,7 @@ def test_bootstrap_warns_on_the_ibm_unsupported_default(monkeypatch, tmp_path):
     still does not list it, so a default bootstrap still prints the warning, naming the
     decision."""
     _resume_harness(monkeypatch, tmp_path)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     assert result.stderr.startswith("WARNING: IBM does not support MQ on ubuntu:26 (")
     assert (
@@ -1715,7 +1713,7 @@ def test_bootstrap_supported_os_prints_no_warning(monkeypatch, tmp_path):
     _resume_harness(monkeypatch, tmp_path)
     _catalog_24_26(monkeypatch, tmp_path, unsupported_26=True)
     cfg = _build_file(tmp_path, "os: ubuntu:24\n")
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--config", str(cfg)])
     assert result.exit_code == 0, result.output
     assert "WARNING" not in result.stderr
 
@@ -1734,7 +1732,7 @@ def test_bootstrap_supported_stack_os_warns_for_infra_mq_only(monkeypatch, tmp_p
     #1285's decision): exactly one warning, the infra_mq one (#1508)."""
     _resume_harness(monkeypatch, tmp_path)
     cfg = _build_file(tmp_path, "os: ubuntu:24\n")
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--config", str(cfg)])
     assert result.exit_code == 0, result.output
     warnings = [line for line in result.stderr.splitlines() if line.startswith("WARNING")]
     [only] = warnings
@@ -1746,7 +1744,7 @@ def test_bootstrap_unsupported_stack_os_and_infra_mq_warn_once_each(monkeypatch,
     """The default Ubuntu stack (26) and infra_mq (26): the stack warning, then the
     infra_mq one, each printed once (#1508)."""
     _resume_harness(monkeypatch, tmp_path)
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     warnings = [line for line in result.stderr.splitlines() if line.startswith("WARNING")]
     assert len(warnings) == 2
@@ -1768,7 +1766,7 @@ def test_bootstrap_warns_for_infra_mq_with_commons_already_running(monkeypatch, 
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(RecordingRunner(results=[])))
     _stub_ensure(monkeypatch)
     cfg = _build_file(tmp_path, "os: ubuntu:24\n")
-    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-ubuntu", "--config", str(cfg)])
     assert result.exit_code == 0, result.output
     assert result.stderr.count(_INFRA_MQ_WARNING) == 1
 
@@ -1807,17 +1805,17 @@ def _virsh_list(lines):
 
 def test_stack_live_true_when_a_member_domain_runs(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    runner = _virsh_list([" 3    lab_pcmk-a2    running", " -    lab_obs    running"])
+    runner = _virsh_list([" 3    lab_nha-ubuntu-a2    running", " -    lab_obs    running"])
     monkeypatch.setattr(cli, "_virsh_runner", lambda: runner)
-    assert _real_stack_live("pcmk-ubuntu") is True
+    assert _real_stack_live("nativeha-ubuntu") is True
     assert runner.recorded[0].argv == ["virsh", "-c", "qemu:///system", "list", "--all"]
 
 
 def test_stack_live_false_when_only_commons_or_shut_off(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    runner = _virsh_list([" -    lab_pcmk-a1    shut off", " 4    lab_obs    running"])
+    runner = _virsh_list([" -    lab_nha-ubuntu-a1    shut off", " 4    lab_obs    running"])
     monkeypatch.setattr(cli, "_virsh_runner", lambda: runner)
-    assert _real_stack_live("pcmk-ubuntu") is False
+    assert _real_stack_live("nativeha-ubuntu") is False
 
 
 def test_stack_live_false_without_probing_for_a_memberless_stack(monkeypatch):
@@ -1832,7 +1830,7 @@ def test_stack_live_fails_loud_when_virsh_fails(monkeypatch, tmp_path, capsys):
     runner = RecordingRunner(results=[ScriptedResult(["error: no connection"], exit_code=1)])
     monkeypatch.setattr(cli, "_virsh_runner", lambda: runner)
     with pytest.raises(typer.Exit) as exc:
-        _real_stack_live("pcmk-ubuntu")
+        _real_stack_live("nativeha-ubuntu")
     assert exc.value.exit_code == 1
     err = capsys.readouterr().err
     assert "virsh list failed (exit 1):" in err and "error: no connection" in err

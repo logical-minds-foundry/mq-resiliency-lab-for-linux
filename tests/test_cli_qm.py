@@ -31,28 +31,29 @@ def _deps(runner):
 
 
 # qm dispatch reads the stack's verbs + cluster_group + qm (short-derived names) (#350).
-_PCMK_VERBS = (
+_NHAU_VERBS = (
     "    verbs:\n"
-    "      qm-create: { playbook: site-pcmk-qm.yml }\n"
-    "      qm-destroy: { playbook: site-pcmk-qm-down.yml }\n"
-    "      qm-up: { pcs: resource enable mq_group }\n"
-    "      qm-down: { pcs: resource disable mq_group }\n"
-    "      qm-status: { pcs: status resources }\n"
+    "      qm-create: { playbook: site-nativeha-ubuntu.yml }\n"
+    "      qm-up: { cmd: 'systemctl start mqmonitor@{qm}' }\n"
+    "      qm-down: { cmd: 'systemctl stop mqmonitor@{qm}' }\n"
+    "      qm-status: { cmd: 'dspmq -m {qm} -o nativeha -x' }\n"
 )
 
 _TOPO = (
     "nodes:\n"
-    "  san-a:   {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
-    "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
-    "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
-    "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n"
-    "    os_family: ubuntu\n    short: PCMK\n"
-    "    cluster_group: pcmk_a\n    groups: [san_a, pcmk_a]\n"
-    "    provision: ansible/site-pcmk.yml\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
-    + _PCMK_VERBS
+    "  nha-ubuntu-a1: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.11}}\n"
+    "  nha-ubuntu-a2: {box: mq-nativeha, nics: {net-mgmt: 10.50.0.12}}\n"
+    "groups:\n  nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2]\n"
+    "stacks:\n  nativeha-ubuntu:\n    mechanism: native-ha\n"
+    "    os_family: ubuntu\n    short: NHAU\n"
+    "    cluster_group: nha_ubuntu_a\n    groups: [nha_ubuntu_a]\n"
+    "    provision: ansible/site-nativeha-ubuntu.yml\n"
+    "    qm: {}\n"
+    + _NHAU_VERBS
     + "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
 )
+
+_RUNNING = {"nha-ubuntu-a1": "running", "nha-ubuntu-a2": "running"}
 
 
 def _probe(states):
@@ -73,33 +74,29 @@ def _argvs(runner):
 
 def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    runner = RecordingRunner(
-        results=[_probe({"san-a": "running", "pcmk-a1": "running"}), ScriptedResult([])]
-    )
+    runner = RecordingRunner(results=[_probe(_RUNNING), ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "create", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "create", "nativeha-ubuntu"])
     assert result.exit_code == 0
     play = runner.recorded[-1]
     assert play.argv == [
         "ansible-playbook",
-        "site-pcmk-qm.yml",
+        "site-nativeha-ubuntu.yml",
         "-e",
-        "qm_name=PCMKAPP",
+        "qm_name=NHAUAPP",
         "-e",
-        "qm_vip=10.10.1.200",
+        "qm_vip=",
         "-e",
-        "qm_vip_ext=10.60.0.10",
-        "-e",
-        "qm_app=PCMKAPP",
+        "qm_app=NHAUAPP",
         "-e",
         "qm_svc=SVCQM",
         "-e",
-        "chl_to_svc=PCMKAPP.SVCQM",
+        "chl_to_svc=NHAUAPP.SVCQM",
         "-e",
-        "chl_to_app=SVCQM.PCMKAPP",
+        "chl_to_app=SVCQM.NHAUAPP",
         # each stack owns its own request queue on the shared SVCQM (#446)
         "-e",
-        "svc_req_queue=PCMK.SVC.REQUEST",
+        "svc_req_queue=NHAU.SVC.REQUEST",
         # svc is now the shared counterparty; its CONNAME comes from the svc: block
         # and is threaded for every stack (#446).
         "-e",
@@ -112,102 +109,76 @@ def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
 def test_qm_create_passes_svc_conn_from_the_shared_svc_block(monkeypatch, tmp_path):
     # Post-#446 the counterparty CONNAME is a property of the shared svc: block, not
     # the per-stack qm: block — it is threaded for every stack that has one.
-    topo = (
-        "nodes:\n"
-        "  san-a:   {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
-        "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
-        "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
-        "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n"
-        "    os_family: ubuntu\n    short: PCMK\n"
-        "    cluster_group: pcmk_a\n    groups: [san_a, pcmk_a]\n"
-        "    provision: ansible/site-pcmk.yml\n"
-        "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
-        + _PCMK_VERBS
-        + "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
+    topo = _TOPO.replace(
+        "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }",
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }",
     )
     _seed(monkeypatch, tmp_path, topo)
-    runner = RecordingRunner(
-        results=[_probe({"san-a": "running", "pcmk-a1": "running"}), ScriptedResult([])]
-    )
+    runner = RecordingRunner(results=[_probe(_RUNNING), ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "create", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "create", "nativeha-ubuntu"])
     assert result.exit_code == 0
     assert "svc_conn=10.60.0.50" in runner.recorded[-1].argv
 
 
 def test_qm_create_members_down_exits_3(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    runner = RecordingRunner(results=[_probe({"san-a": "running"})])  # pcmk-a1 not running
+    # nha-ubuntu-a2 not running
+    runner = RecordingRunner(results=[_probe({"nha-ubuntu-a1": "running"})])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "create", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "create", "nativeha-ubuntu"])
     assert result.exit_code == 3
     assert _argvs(runner) == [[*_VIRSH, "list", "--all"]]  # probe only, no playbook
 
 
 def test_qm_create_playbook_failure_propagates(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
-    runner = RecordingRunner(
-        results=[
-            _probe({"san-a": "running", "pcmk-a1": "running"}),
-            ScriptedResult([], exit_code=2),
-        ]
-    )
+    runner = RecordingRunner(results=[_probe(_RUNNING), ScriptedResult([], exit_code=2)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "create", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "create", "nativeha-ubuntu"])
     assert result.exit_code == 2
 
 
-def test_qm_destroy_runs_teardown_playbook(monkeypatch, tmp_path):
-    _seed(monkeypatch, tmp_path)
-    runner = RecordingRunner(
-        results=[_probe({"san-a": "running", "pcmk-a1": "running"}), ScriptedResult([])]
-    )
-    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "destroy", "pcmk-ubuntu"])
-    assert result.exit_code == 0
-    assert runner.recorded[-1].argv[1] == "site-pcmk-qm-down.yml"
-
-
-def test_qm_up_runs_pcs_enable_on_first_cluster_node(monkeypatch, tmp_path):
+def test_qm_up_runs_the_cmd_on_first_cluster_node(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "up", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "up", "nativeha-ubuntu"])
     assert result.exit_code == 0
     assert runner.recorded[-1].argv == [
         "ansible",
-        "pcmk_a[0]",
+        "nha_ubuntu_a[0]",
         "-b",
         "-m",
         "shell",
         "-a",
-        "pcs resource enable mq_group",
+        "systemctl start mqmonitor@NHAUAPP",
     ]
 
 
-def test_qm_down_runs_pcs_disable(monkeypatch, tmp_path):
+def test_qm_down_runs_the_stop_cmd(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "down", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "down", "nativeha-ubuntu"])
     assert result.exit_code == 0
-    assert runner.recorded[-1].argv[-1] == "pcs resource disable mq_group"
+    assert runner.recorded[-1].argv[-1] == "systemctl stop mqmonitor@NHAUAPP"
 
 
-def test_qm_status_runs_pcs_status(monkeypatch, tmp_path):
+def test_qm_status_runs_the_status_cmd(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "status", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "status", "nativeha-ubuntu"])
     assert result.exit_code == 0
-    assert runner.recorded[-1].argv[-1] == "pcs status resources"
+    assert runner.recorded[-1].argv[-1] == "dspmq -m NHAUAPP -o nativeha -x"
 
 
-def test_qm_pcs_failure_propagates(monkeypatch, tmp_path):
+def test_qm_cluster_cmd_failure_propagates(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     runner = RecordingRunner(results=[ScriptedResult([], exit_code=5)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["qm", "up", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", "up", "nativeha-ubuntu"])
     assert result.exit_code == 5
 
 
@@ -247,7 +218,7 @@ _RDQM_TOPO = (
     "groups:\n  rdqm_a: [rdqm-a1]\n"
     "stacks:\n  rdqm-rhel:\n    mechanism: rdqm\n    os_family: rhel\n    short: RDQM\n"
     "    cluster_group: rdqm_a\n    groups: [rdqm_a]\n"
-    # no vip_ext: RDQM has one floating IP per QM (#216), spent on the data VIP
+    # RDQM has one floating IP per QM (#216), spent on the data VIP
     "    qm: { vip: 10.10.1.100 }\n"
     "    verbs:\n"
     "      qm-status: { cmd: '/opt/mqm/bin/rdqmstatus -m {qm}' }\n"
@@ -297,7 +268,7 @@ def test_qm_create_rdqm_script_failure_propagates(monkeypatch, tmp_path):
 
 
 # --- the instance-record gate (epic .github#280, T3) -----------------------------------
-_QM_VERBS = ["create", "destroy", "up", "down", "status"]
+_QM_VERBS = ["create", "up", "down", "status"]
 
 
 @pytest.mark.parametrize("verb", _QM_VERBS)
@@ -306,11 +277,11 @@ def test_qm_verb_refuses_a_live_stack_without_record(monkeypatch, tmp_path, verb
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda v, ts: _deps(runner))
     monkeypatch.setattr(cli, "_stack_live", lambda name: True)
-    result = CliRunner().invoke(cli.app, ["qm", verb, "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["qm", verb, "nativeha-ubuntu"])
     assert result.exit_code == 2
     assert (
-        "pcmk-ubuntu is running without a version record; run `mqlab teardown pcmk-ubuntu` "
-        "and re-bootstrap"
+        "nativeha-ubuntu is running without a version record; run "
+        "`mqlab teardown nativeha-ubuntu` and re-bootstrap"
     ) in result.stderr
     assert runner.recorded == []  # refused before any ansible/virsh step
 
@@ -321,8 +292,8 @@ def test_qm_verb_runs_on_a_live_recorded_stack(monkeypatch, tmp_path, verb):
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda v, ts: _deps(runner))
     monkeypatch.setattr(cli, "_stack_live", lambda name: True)
-    instances.write_record(InstanceRecord("pcmk-ubuntu", OsRef("ubuntu", 24), None, "t"))
-    result = CliRunner().invoke(cli.app, ["qm", verb, "pcmk-ubuntu"])
+    instances.write_record(InstanceRecord("nativeha-ubuntu", OsRef("ubuntu", 24), None, "t"))
+    result = CliRunner().invoke(cli.app, ["qm", verb, "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     assert runner.recorded[-1].argv[0] == "ansible"
 

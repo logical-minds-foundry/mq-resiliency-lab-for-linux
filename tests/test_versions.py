@@ -83,8 +83,7 @@ def _with_ubuntu26(
 ) -> dict[str, Any]:
     """The committed catalog with ubuntu:26 replaced by a bare entry (no recorded lab
     decision unless ``decided``) offered to nativeha-ubuntu, whose default is ``default``;
-    pcmk-ubuntu, pcmk-drbd-ubuntu and infra_mq sit on 24 so only nativeha-ubuntu's
-    default is under test."""
+    infra_mq sits on 24 so only nativeha-ubuntu's default is under test."""
     data = copy.deepcopy(_committed())
     entry: dict[str, Any] = {"base_box": "cloud-image/ubuntu-26.04"}
     if unsupported:
@@ -96,8 +95,6 @@ def _with_ubuntu26(
         "supported": ["ubuntu:24", "ubuntu:26"],
         "default": default,
     }
-    data["stacks"]["pcmk-ubuntu"]["default"] = "ubuntu:24"
-    data["stacks"]["pcmk-drbd-ubuntu"]["default"] = "ubuntu:24"
     data["infra_mq"] = "ubuntu:24"
     return data
 
@@ -154,19 +151,15 @@ def test_committed_catalog():
     }
     assert {s: spec["supported"] for s, spec in cat.stacks.items()} == {
         "nativeha-ubuntu": [OsRef("ubuntu", 24), OsRef("ubuntu", 26)],
-        "pcmk-ubuntu": [OsRef("ubuntu", 24), OsRef("ubuntu", 26)],
         "nativeha-rhel-crr": [OsRef("rhel", 9), OsRef("rhel", 10)],
         "rdqm-rhel": [OsRef("rhel", 9), OsRef("rhel", 10)],
-        "pcmk-drbd-ubuntu": [OsRef("ubuntu", 24), OsRef("ubuntu", 26)],
     }
     # Ubuntu defaults on 26 ahead of IBM, by the recorded lab decision (#1285);
     # nativeha-rhel-crr (T11) and rdqm-rhel (#1473) default to RHEL 10, each validated live.
     assert {s: spec["default"] for s, spec in cat.stacks.items()} == {
         "nativeha-ubuntu": OsRef("ubuntu", 26),
-        "pcmk-ubuntu": OsRef("ubuntu", 26),
         "nativeha-rhel-crr": OsRef("rhel", 10),
         "rdqm-rhel": OsRef("rhel", 10),
-        "pcmk-drbd-ubuntu": OsRef("ubuntu", 26),
     }
     rhel9 = cat.oses[OsRef("rhel", 9)]
     assert (rhel9.base_box, rhel9.point, rhel9.iso, rhel9.arch_pin) == (
@@ -244,14 +237,11 @@ def test_committed_roles_bake_their_components():
     assert {role: spec["components"] for role, spec in cat.roles.items()} == {
         "infra": (),
         "obs": (),
-        "san": obs,
         "mq-client": ("mq-resiliency-clients",),
         "mq-nativeha": obs,
-        "pcmk": obs,
-        "pdrbd": obs,
         "mq-rdqm": obs,
     }
-    assert cat.box("pcmk", OsRef("ubuntu", 24)).components == obs
+    assert cat.box("mq-nativeha", OsRef("ubuntu", 24)).components == obs
 
 
 def test_mq_client_bakes_the_clients_component():
@@ -263,24 +253,25 @@ def test_mq_client_bakes_the_clients_component():
 
 def test_role_components_flow_to_box_entry(tmp_path, monkeypatch):
     _fake_components(tmp_path, monkeypatch, "alpha", "beta")
-    path = _write(tmp_path, _mutated(("roles", "pcmk", "components"), ["alpha", "beta"]))
+    path = _write(tmp_path, _mutated(("roles", "mq-nativeha", "components"), ["alpha", "beta"]))
     cat = load_catalog(path)
-    assert cat.box("pcmk", OsRef("ubuntu", 24)).components == ("alpha", "beta")
+    assert cat.box("mq-nativeha", OsRef("ubuntu", 24)).components == ("alpha", "beta")
     assert cat.box("obs", OsRef("ubuntu", 24)).components == ()
 
 
 def test_role_components_refuses_a_dir_without_pyproject(tmp_path, monkeypatch):
     comps = _fake_components(tmp_path, monkeypatch)
     (comps / "half").mkdir()  # a directory, but not a uv project
-    path = _write(tmp_path, _mutated(("roles", "pcmk", "components"), ["half"]))
-    with pytest.raises(VersionError, match="roles.pcmk: unknown component half"):
+    path = _write(tmp_path, _mutated(("roles", "mq-nativeha", "components"), ["half"]))
+    with pytest.raises(VersionError, match="roles.mq-nativeha: unknown component half"):
         load_catalog(path)
 
 
 def test_role_components_refuses_duplicates(tmp_path, monkeypatch):
     _fake_components(tmp_path, monkeypatch, "alpha")
-    path = _write(tmp_path, _mutated(("roles", "pcmk", "components"), ["alpha", "alpha"]))
-    with pytest.raises(VersionError, match="roles.pcmk: components lists a name twice"):
+    data = _mutated(("roles", "mq-nativeha", "components"), ["alpha", "alpha"])
+    path = _write(tmp_path, data)
+    with pytest.raises(VersionError, match="roles.mq-nativeha: components lists a name twice"):
         load_catalog(path)
 
 
@@ -306,14 +297,6 @@ def test_box_name_is_role_plus_token():
     )
     assert nha.os is cat.oses[OsRef("ubuntu", 24)]
     assert cat.box("mq-rdqm", OsRef("rhel", 9)).bake_stem == "mq-rdqm"
-
-
-def test_pcmk_is_mq_bearing_because_it_bakes_mq():
-    """bake-pcmk-ubuntu.yml installs MQ through mq-install, whose skip-if-baked guard keys
-    on the presence of cmqc.h, not its version, and the per-run cluster pass runs the same
-    role. So the lab/mq-version pin must be in the pcmk box's manifest hash: otherwise a
-    pin bump REUSEs the stale box and its nodes keep the old MQ (#1087, #1572)."""
-    assert load_catalog().box("pcmk", OsRef("ubuntu", 24)).mq_bearing is True
 
 
 def test_obs_carries_no_mq_and_is_not_mq_bearing():
@@ -432,13 +415,13 @@ def _bake_stems() -> list[tuple[str, str]]:
 
 def test_every_role_whose_bake_reaches_mq_install_is_mq_bearing():
     """A bake playbook that reaches mq-install at any depth bakes MQ, so its role must be
-    MQ-bearing or an MQ pin bump silently REUSEs a box on the old MQ (#1087). pcmk
-    slipped through with a direct include (#1572), and obs used to bake MQ through
+    MQ-bearing or an MQ pin bump silently REUSEs a box on the old MQ (#1087). A box
+    once slipped through with a direct include (#1572), and obs used to bake MQ through
     mq-exporter's build tasks (#1584)."""
     cat = load_catalog()
     ansible = versions_catalog_path().parent.parent / "ansible"
     bakes_mq = {role for role, stem in _bake_stems() if _bake_reaches(ansible, stem, "mq-install")}
-    assert {"pcmk", "pdrbd", "mq-client"} <= bakes_mq  # the guard sees real includes
+    assert {"mq-client"} <= bakes_mq  # the guard sees real includes
     assert sorted(r for r in bakes_mq if not cat.roles[r]["mq_bearing"]) == []
 
 
@@ -596,7 +579,8 @@ def test_stack_default_when_no_build_file():
 
 
 def test_stack_default_when_build_file_omits_os():
-    assert load_catalog().stack_os("pcmk-ubuntu", BuildFile(os=None), ARM) == OsRef("ubuntu", 26)
+    cat = load_catalog()
+    assert cat.stack_os("nativeha-ubuntu", BuildFile(os=None), ARM) == OsRef("ubuntu", 26)
 
 
 def test_stack_takes_build_file_os(tmp_path):
@@ -605,32 +589,29 @@ def test_stack_takes_build_file_os(tmp_path):
     assert cat.stack_os("nativeha-ubuntu", build, X86) == OsRef("ubuntu", 26)
 
 
-@pytest.mark.parametrize("stack", ["nativeha-ubuntu", "pcmk-ubuntu"])
 @pytest.mark.parametrize("facts", [X86, ARM])
-def test_ubuntu26_selectable_on_both_ubuntu_stacks(stack, facts):
-    """The committed catalog offers ubuntu:26 to both Ubuntu stacks, on either host arch,
+def test_ubuntu26_selectable_on_the_ubuntu_stack(facts):
+    """The committed catalog offers ubuntu:26 to the Ubuntu stack, on either host arch,
     as IBM-unsupported: it resolves, and it carries the IBM-unsupported warning (#1282)."""
     cat = load_catalog()
-    ref = cat.stack_os(stack, BuildFile(os=OsRef("ubuntu", 26)), facts)
+    ref = cat.stack_os("nativeha-ubuntu", BuildFile(os=OsRef("ubuntu", 26)), facts)
     assert ref == OsRef("ubuntu", 26)
     assert cat.support_warning(ref) == _WARNING_26
 
 
-@pytest.mark.parametrize("stack", ["nativeha-ubuntu", "pcmk-ubuntu"])
-def test_ubuntu_stack_default_is_26_and_still_warns(stack):
-    """The Ubuntu defaults are on 26 ahead of IBM's SPCR by a recorded lab decision
+def test_ubuntu_stack_default_is_26_and_still_warns():
+    """The Ubuntu default is on 26 ahead of IBM's SPCR by a recorded lab decision
     (#1285); IBM still does not list 26.04, so the default still warns."""
     cat = load_catalog()
-    assert cat.stack_os(stack, None, X86) == OsRef("ubuntu", 26)
-    assert cat.support_warning(cat.default_os(stack)) == _WARNING_26
+    assert cat.stack_os("nativeha-ubuntu", None, X86) == OsRef("ubuntu", 26)
+    assert cat.support_warning(cat.default_os("nativeha-ubuntu")) == _WARNING_26
 
 
-@pytest.mark.parametrize("stack", ["nativeha-ubuntu", "pcmk-ubuntu"])
 @pytest.mark.parametrize("facts", [X86, ARM])
-def test_ubuntu24_stays_selectable(stack, facts):
-    """24 stays selectable on both Ubuntu stacks after the flip, with no warning (#1285)."""
+def test_ubuntu24_stays_selectable(facts):
+    """24 stays selectable on the Ubuntu stack after the flip, with no warning (#1285)."""
     cat = load_catalog()
-    ref = cat.stack_os(stack, BuildFile(os=OsRef("ubuntu", 24)), facts)
+    ref = cat.stack_os("nativeha-ubuntu", BuildFile(os=OsRef("ubuntu", 24)), facts)
     assert ref == OsRef("ubuntu", 24)
     assert cat.support_warning(ref) is None
 
@@ -924,7 +905,6 @@ _INFRA_MQ_WARNING_26 = (
     ("stack", "os_ref"),
     [
         ("nativeha-ubuntu", OsRef("ubuntu", 24)),
-        ("pcmk-ubuntu", OsRef("ubuntu", 24)),
         ("nativeha-rhel-crr", OsRef("rhel", 10)),
         ("rdqm-rhel", OsRef("rhel", 9)),
     ],
@@ -942,7 +922,7 @@ def test_infra_mq_warns_for_a_supported_os_stack(stack, os_ref):
 def test_infra_mq_and_stack_both_warn_when_both_unsupported():
     """An Ubuntu stack on its 26 default and infra_mq on 26: both warnings (#1508)."""
     cat = load_catalog()
-    assert cat.support_warning(cat.stack_os("pcmk-ubuntu", None, X86)) == _WARNING_26
+    assert cat.support_warning(cat.stack_os("nativeha-ubuntu", None, X86)) == _WARNING_26
     assert cat.infra_mq_warning() == _INFRA_MQ_WARNING_26
 
 
@@ -1010,7 +990,6 @@ def test_supported_status_with_source_is_accepted(tmp_path):
 # As stack_roles() derives them from the topology: shared roles are never a stack's.
 _STACK_ROLES = {
     "nativeha-ubuntu": {"mq-nativeha"},
-    "pcmk-ubuntu": {"pcmk"},
     "nativeha-rhel-crr": {"mq-nativeha"},
     "rdqm-rhel": {"mq-rdqm"},
 }
@@ -1023,12 +1002,9 @@ def test_all_boxes_on_x86():
     assert names == [
         "infra-ubuntu26",
         "obs-ubuntu26",
-        "san-ubuntu26",
         "mq-client-ubuntu26",
         "mq-nativeha-ubuntu24",
         "mq-nativeha-ubuntu26",
-        "pcmk-ubuntu24",
-        "pcmk-ubuntu26",
         "mq-nativeha-rhel9",
         "mq-nativeha-rhel10",
         "mq-rdqm-rhel9",
@@ -1041,12 +1017,9 @@ def test_all_boxes_skips_rhel_on_aarch64():
     assert names == {
         "infra-ubuntu26",
         "obs-ubuntu26",
-        "san-ubuntu26",
         "mq-client-ubuntu26",
         "mq-nativeha-ubuntu24",
         "mq-nativeha-ubuntu26",
-        "pcmk-ubuntu24",
-        "pcmk-ubuntu26",
     }
 
 
@@ -1068,8 +1041,8 @@ def test_mq_client_resolves_from_infra_mq(tmp_path):
 
 
 def test_shared_os_refuses_a_stack_role():
-    with pytest.raises(VersionError, match="role 'pcmk' is not a shared role .* stack's OS"):
-        load_catalog().shared_os("pcmk")
+    with pytest.raises(VersionError, match="role 'mq-rdqm' is not a shared role .* stack's OS"):
+        load_catalog().shared_os("mq-rdqm")
 
 
 def test_all_boxes_covers_every_supported_version(tmp_path):
@@ -1320,7 +1293,6 @@ def test_node_boxes_defaults(no_records):
     assert nb["nha-ubuntu-a1"].name == "mq-nativeha-ubuntu26"
     assert nb["nha-rhel-crr-a1"].name == "mq-nativeha-rhel10"  # default flipped (T11)
     assert nb["rdqm-a1"].name == "mq-rdqm-rhel10"  # default flipped (#1473)
-    assert nb["pcmk-a1"].name == "pcmk-ubuntu26"
     assert nb["infra-svc"].name == "infra-ubuntu26"
     assert nb["svc-sim"].name == "mq-client-ubuntu26"
 
@@ -1328,21 +1300,6 @@ def test_node_boxes_defaults(no_records):
 def test_node_boxes_covers_every_topology_node(no_records):
     topo = topology.load()
     assert set(node_boxes(topo, load_catalog())) == set(topo["nodes"])
-
-
-def test_san_nodes_resolve_to_baked_san_box(no_records):
-    """The SAN targets boot the baked `san` box on the infra OS (#1278, spec §4.7.1):
-    bake stem `san`, not MQ-bearing, whatever stack lists them."""
-    cat = load_catalog()
-    nb = node_boxes(topology.load(), cat)
-    assert nb["san-a"].name == nb["san-b"].name == f"san-{cat.infra.token}"
-    for san in ("san-a", "san-b"):
-        assert (nb[san].role, nb[san].os) == ("san", cat.oses[cat.infra])
-        assert (nb[san].bake_stem, nb[san].mq_bearing) == ("san", False)
-
-
-def test_san_is_an_infra_role():
-    assert "san" in INFRA_ROLES
 
 
 def test_commons_render_uses_infra_without_records(no_records):  # Review Focus 5
@@ -1371,18 +1328,13 @@ def test_shared_nodes_resolve_without_any_record_lookup(monkeypatch):  # Review 
 def test_node_boxes_reads_each_stack_record(monkeypatch, tmp_path):
     """A stack's nodes follow its instance record, not the default; records of different
     stacks combine in one render (two stacks at different majors)."""
-    data = _with_ubuntu26(unsupported=False)
-    data["stacks"]["pcmk-ubuntu"] = {
-        "supported": ["ubuntu:24", "ubuntu:26"],
-        "default": "ubuntu:24",
-    }
-    cat = load_catalog(_write(tmp_path, data))
-    records = {"pcmk-ubuntu": InstanceRecord("pcmk-ubuntu", OsRef("ubuntu", 26), None, "t")}
-    monkeypatch.setattr(instances, "read_record", records.get)
+    cat = load_catalog(_write(tmp_path, _with_ubuntu26(unsupported=False)))
+    record = InstanceRecord("nativeha-rhel-crr", OsRef("rhel", 9), None, "t")
+    monkeypatch.setattr(instances, "read_record", {"nativeha-rhel-crr": record}.get)
     nb = node_boxes(topology.load(), cat)
-    assert (nb["nha-ubuntu-a1"].name, nb["pcmk-a1"].name) == (
-        "mq-nativeha-ubuntu24",
-        "pcmk-ubuntu26",
+    assert (nb["nha-ubuntu-a1"].name, nb["nha-rhel-crr-a1"].name) == (
+        "mq-nativeha-ubuntu24",  # no record: the (rewritten) default
+        "mq-nativeha-rhel9",  # its record, not the rhel:10 default
     )
     assert nb["obs"].os.ref == cat.infra  # shared nodes stay on the infra OS
 
@@ -1418,8 +1370,8 @@ def test_node_with_an_unknown_role_fails_loud(no_records):
 
 
 def test_stack_role_node_outside_every_stack_fails_loud(no_records):
-    with pytest.raises(VersionError, match=r"node n1: box role 'pcmk' .* \(it is in: none\)"):
-        node_boxes({"nodes": {"n1": {"box": "pcmk"}}}, load_catalog())
+    with pytest.raises(VersionError, match=r"node n1: box role 'mq-rdqm' .* \(it is in: none\)"):
+        node_boxes({"nodes": {"n1": {"box": "mq-rdqm"}}}, load_catalog())
 
 
 def test_stack_role_node_in_two_stacks_fails_loud(no_records):
@@ -1432,9 +1384,9 @@ def test_stack_role_node_in_two_stacks_fails_loud(no_records):
 
 
 def test_node_listed_twice_in_one_stack_is_owned_once(no_records):
-    topo = _topo({"n1": {"box": "pcmk"}}, {"pcmk-ubuntu": ("ubuntu", ["n1", "n1"])})
-    topo["stacks"]["pcmk-ubuntu"]["groups"].append("g_pcmk-ubuntu")
-    assert node_boxes(topo, load_catalog())["n1"].name == "pcmk-ubuntu26"
+    topo = _topo({"n1": {"box": "mq-nativeha"}}, {"nativeha-ubuntu": ("ubuntu", ["n1", "n1"])})
+    topo["stacks"]["nativeha-ubuntu"]["groups"].append("g_nativeha-ubuntu")
+    assert node_boxes(topo, load_catalog())["n1"].name == "mq-nativeha-ubuntu26"
 
 
 def test_stack_os_family_must_match_the_catalog(no_records):
@@ -1446,7 +1398,7 @@ def test_stack_os_family_must_match_the_catalog(no_records):
 
 
 def test_topology_stack_missing_from_the_catalog_fails_loud(no_records):
-    topo = _topo({"n1": {"box": "pcmk"}}, {"ghost": ("ubuntu", ["n1"])})
+    topo = _topo({"n1": {"box": "mq-nativeha"}}, {"ghost": ("ubuntu", ["n1"])})
     with pytest.raises(VersionError, match="unknown stack 'ghost'"):
         node_boxes(topo, load_catalog())
 
@@ -1454,18 +1406,16 @@ def test_topology_stack_missing_from_the_catalog_fails_loud(no_records):
 def test_stack_roles_from_node_box_roles():
     roles = stack_roles(topology.load(), load_catalog())
     assert roles == {
-        "pcmk-ubuntu": {"pcmk"},
         "rdqm-rhel": {"mq-rdqm"},
         "nativeha-rhel-crr": {"mq-nativeha"},
         "nativeha-ubuntu": {"mq-nativeha"},
-        "pcmk-drbd-ubuntu": {"pdrbd"},
     }
 
 
-def test_catalog_without_the_san_role_fails_loud(tmp_path):
-    """san is an infra role, so a catalog that drops it cannot bake the SAN targets."""
-    data = _mutated(("roles", "san"), _DELETE)
-    with pytest.raises(VersionError, match=r"unknown box role 'san'"):
+def test_catalog_without_an_infra_role_fails_loud(tmp_path):
+    """obs is an infra role, so a catalog that drops it cannot bake the obs node."""
+    data = _mutated(("roles", "obs"), _DELETE)
+    with pytest.raises(VersionError, match=r"unknown box role 'obs'"):
         load_catalog(_write(tmp_path, data))
 
 

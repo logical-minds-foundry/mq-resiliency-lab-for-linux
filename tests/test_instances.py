@@ -34,14 +34,13 @@ def _committed() -> dict[str, Any]:
 
 def _catalog_file(tmp_path: Path, defaults: dict[str, str]) -> Path:
     """The committed catalog with ubuntu:26 stripped of its unsupported marker (so a test
-    may flip a default to it), offered to both Ubuntu stacks."""
+    may flip a default to it), offered to the Ubuntu stack."""
     data = copy.deepcopy(_committed())
     data["os"]["ubuntu"][26] = {"base_box": "cloud-image/ubuntu-26.04"}
-    for stack in ("nativeha-ubuntu", "pcmk-ubuntu"):
-        data["stacks"][stack] = {
-            "supported": ["ubuntu:24", "ubuntu:26"],
-            "default": defaults.get(stack, "ubuntu:24"),
-        }
+    data["stacks"]["nativeha-ubuntu"] = {
+        "supported": ["ubuntu:24", "ubuntu:26"],
+        "default": defaults.get("nativeha-ubuntu", "ubuntu:24"),
+    }
     path = tmp_path / "versions.yaml"
     path.write_text(yaml.safe_dump(data))
     return path
@@ -77,7 +76,7 @@ def test_record_path_is_under_the_instances_dir(tmp_state):
 # --- read / write / delete -------------------------------------------------------------
 
 
-@pytest.mark.parametrize("stack", ["nativeha-ubuntu", "pcmk-ubuntu", "rdqm-rhel", "ghost"])
+@pytest.mark.parametrize("stack", ["nativeha-ubuntu", "nativeha-rhel-crr", "rdqm-rhel", "ghost"])
 def test_read_record_none_when_absent(stack):
     assert instances.read_record(stack) is None
 
@@ -249,11 +248,11 @@ def test_unrecorded_stack_follows_the_default_change(catalog_with_default):
 
 def test_render_combines_records_across_stacks(catalog_24_26):  # Review Focus 1
     instances.write_record(InstanceRecord("nativeha-ubuntu", U24, None, "t"))
-    instances.write_record(InstanceRecord("pcmk-ubuntu", U26, None, "t"))
+    instances.write_record(InstanceRecord("rdqm-rhel", OsRef("rhel", 9), None, "t"))
     nb = versions.node_boxes(topology.load(), catalog_24_26)
-    assert (nb["nha-ubuntu-a1"].name, nb["pcmk-a1"].name) == (
+    assert (nb["nha-ubuntu-a1"].name, nb["rdqm-a1"].name) == (
         "mq-nativeha-ubuntu24",
-        "pcmk-ubuntu26",
+        "mq-rdqm-rhel9",
     )
     # The shared nodes get the shared boxes: non-MQ on infra, mq-client on infra_mq (#285).
     assert nb["obs"].name == "obs-ubuntu26"

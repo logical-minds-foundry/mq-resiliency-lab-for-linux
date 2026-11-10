@@ -18,44 +18,42 @@ from mqlab.versions import OsRef
 # commons includes svc+app so all_vms covers the shared distributed-path VMs.
 TOPO = (
     "nodes:\n"
-    "  san-a: { box: san }\n"
-    "  pcmk-a1: { box: pcmk }\n"
-    "  pcmk-a2: { box: pcmk }\n"
-    "  pcmk-a3: { box: pcmk }\n"
-    "  pcmk-b1: { box: pcmk }\n"
+    "  nha-ubuntu-a1: { box: mq-nativeha }\n"
+    "  nha-ubuntu-a2: { box: mq-nativeha }\n"
+    "  nha-ubuntu-a3: { box: mq-nativeha }\n"
+    "  nha-ubuntu-b1: { box: mq-nativeha }\n"
     "  obs: { box: obs }\n"
     "  mon-probe: { box: mq-client }\n"
     "  svc-sim: { box: mq-client }\n"
     "  app-client: { box: mq-client }\n"
     "groups:\n"
-    "  san_a:   [san-a]\n"
-    "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
-    "  pcmk_b:  [pcmk-b1]\n"
+    "  nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2, nha-ubuntu-a3]\n"
+    "  nha_ubuntu_b: [nha-ubuntu-b1]\n"
     "  obs_box: [obs]\n"
     "  probe:   [mon-probe]\n"
     "  svc:     [svc-sim]\n"
     "  app:     [app-client]\n"
     "stacks:\n"
-    "  pcmk-ubuntu:\n"
-    "    mechanism: pacemaker-san\n"
-    "    os_family: ubuntu\n"
-    "    short: PCMK\n"
-    "    cluster_group: pcmk_a\n"
-    "    groups: [san_a, pcmk_a, pcmk_b]\n"
-    "    provision: ansible/site-pcmk.yml\n"
-    "    secrets: [pcmk_hacluster_password, mqweb_admin_password]\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
-    "    alloc:\n"
-    "      exporter_app_port: 9157\n"
-    "      exporter_svc_port: 9158\n"
-    "      app_unit: app-pcmk\n"
-    "      svc_port: 1414\n"
-    "    verbs:\n"
-    "      qm-status:  { pcs: 'status resources' }\n"
     "  nativeha-ubuntu:\n"
     "    mechanism: native-ha\n"
     "    os_family: ubuntu\n"
     "    short: NHAU\n"
+    "    cluster_group: nha_ubuntu_a\n"
+    "    groups: [nha_ubuntu_a, nha_ubuntu_b]\n"
+    "    provision: ansible/site-nativeha-ubuntu.yml\n"
+    "    secrets: [mqweb_aes_passphrase, mqweb_admin_password]\n"
+    "    qm: { svc_conn: 10.60.0.50 }\n"
+    "    alloc:\n"
+    "      exporter_app_port: 9157\n"
+    "      exporter_svc_port: 9158\n"
+    "      app_unit: app-nhau\n"
+    "      svc_port: 1414\n"
+    "    verbs:\n"
+    "      qm-status:  { cmd: 'dspmq -m {qm}' }\n"
+    "  nativeha-rhel-crr:\n"
+    "    mechanism: native-ha\n"
+    "    os_family: rhel\n"
+    "    short: NHARC\n"
     "    cluster_group: null\n"
     "    groups: []\n"
     "    provision: null\n"
@@ -85,11 +83,10 @@ def _seed(monkeypatch, tmp_path):
 def _states(*, net=True, vms=True, provision=False, observe=False):
     nets = {"net-mgmt": "active", "net-data-a": "active"} if net else {}
     guests = [
-        "san-a",
-        "pcmk-a1",
-        "pcmk-a2",
-        "pcmk-a3",
-        "pcmk-b1",
+        "nha-ubuntu-a1",
+        "nha-ubuntu-a2",
+        "nha-ubuntu-a3",
+        "nha-ubuntu-b1",
         "obs",
         "mon-probe",
         "svc-sim",
@@ -112,7 +109,7 @@ def test_status_shows_phase_completion(monkeypatch, tmp_path):
         "_probe_all",
         lambda deps, stack: _states(net=True, vms=True, provision=False, observe=False),
     )
-    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["status", "nativeha-ubuntu"])
     assert result.exit_code == 0
     assert "provision" in result.output and "✗" in result.output
 
@@ -125,7 +122,7 @@ def test_status_shows_check_for_satisfied_phases(monkeypatch, tmp_path):
         "_probe_all",
         lambda deps, stack: _states(net=True, vms=True, provision=False, observe=False),
     )
-    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["status", "nativeha-ubuntu"])
     assert result.exit_code == 0
     # net + vms satisfied → ✓ present
     assert "✓" in result.output
@@ -144,7 +141,7 @@ def test_status_all_satisfied_shows_only_checks(monkeypatch, tmp_path):
         "_probe_all",
         lambda deps, stack: _states(net=True, vms=True, provision=True, observe=True),
     )
-    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["status", "nativeha-ubuntu"])
     assert result.exit_code == 0
     assert "✓" in result.output
     assert "✗" not in result.output
@@ -158,7 +155,7 @@ def test_status_none_satisfied_shows_only_crosses(monkeypatch, tmp_path):
         "_probe_all",
         lambda deps, stack: _states(net=False, vms=False, provision=False, observe=False),
     )
-    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["status", "nativeha-ubuntu"])
     assert result.exit_code == 0
     assert "✗" in result.output
     assert "✓" not in result.output
@@ -174,9 +171,9 @@ def test_status_probes_once_per_stack(monkeypatch, tmp_path):
         return _states(net=True, vms=True, provision=False, observe=False)
 
     monkeypatch.setattr(cli, "_probe_all", _counting_probe)
-    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["status", "nativeha-ubuntu"])
     assert result.exit_code == 0
-    assert probe_calls == ["pcmk-ubuntu"]
+    assert probe_calls == ["nativeha-ubuntu"]
 
 
 # --------------------------------------------------------------------------- #
@@ -207,7 +204,7 @@ def test_status_no_arg_shows_all_non_reserved_stacks(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["status"])
     assert result.exit_code == 0
     # the non-reserved stack is shown
-    assert "pcmk-ubuntu" in result.output
+    assert "nativeha-ubuntu" in result.output
     # phase names appear
     assert "provision" in result.output
 
@@ -222,8 +219,8 @@ def test_status_no_arg_skips_reserved_stack(monkeypatch, tmp_path):
     )
     result = CliRunner().invoke(cli.app, ["status"])
     assert result.exit_code == 0
-    # nativeha-ubuntu is reserved → must not appear in the all-stacks output
-    assert "nativeha-ubuntu" not in result.output
+    # nativeha-rhel-crr is reserved → must not appear in the all-stacks output
+    assert "nativeha-rhel-crr" not in result.output
 
 
 def test_status_no_arg_probes_each_non_reserved_stack_once(monkeypatch, tmp_path):
@@ -239,7 +236,7 @@ def test_status_no_arg_probes_each_non_reserved_stack_once(monkeypatch, tmp_path
     result = CliRunner().invoke(cli.app, ["status"])
     assert result.exit_code == 0
     # only the non-reserved stack is probed
-    assert probe_calls == ["pcmk-ubuntu"]
+    assert probe_calls == ["nativeha-ubuntu"]
 
 
 # --------------------------------------------------------------------------- #
@@ -258,12 +255,12 @@ def test_status_reserved_stack_named_explicitly_does_not_crash(monkeypatch, tmp_
         "_probe_all",
         lambda deps, stack: probe_calls.append(stack.name) or _states(),
     )
-    result = CliRunner().invoke(cli.app, ["status", "nativeha-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["status", "nativeha-rhel-crr"])
     assert result.exit_code == 0
     # Must not traceback; must emit something about "reserved"
     assert "reserved" in result.output.lower()
     # Should NOT probe a reserved stack
-    assert "nativeha-ubuntu" not in probe_calls
+    assert "nativeha-rhel-crr" not in probe_calls
 
 
 # --------------------------------------------------------------------------- #
@@ -283,19 +280,19 @@ def test_status_shows_the_recorded_os(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     _probe_counting(monkeypatch)
     monkeypatch.setattr(cli, "_stack_live", lambda name: True)
-    instances.write_record(InstanceRecord("pcmk-ubuntu", OsRef("ubuntu", 24), None, "t"))
-    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    instances.write_record(InstanceRecord("nativeha-ubuntu", OsRef("ubuntu", 24), None, "t"))
+    result = CliRunner().invoke(cli.app, ["status", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
-    assert "pcmk-ubuntu: OS Ubuntu 24 (ubuntu:24, instance record)" in result.output
+    assert "nativeha-ubuntu: OS Ubuntu 24 (ubuntu:24, instance record)" in result.output
 
 
 def test_status_unrecorded_stopped_stack_says_not_bootstrapped(monkeypatch, tmp_path):
     """No record and not live: say so — never print the catalog default as its OS."""
     _seed(monkeypatch, tmp_path)
     _probe_counting(monkeypatch)
-    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["status", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
-    assert "pcmk-ubuntu: OS — not bootstrapped (no instance record)" in result.output
+    assert "nativeha-ubuntu: OS — not bootstrapped (no instance record)" in result.output
     assert "ubuntu:24" not in result.output
 
 
@@ -303,10 +300,10 @@ def test_status_live_stack_without_record_refused(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     calls = _probe_counting(monkeypatch)
     monkeypatch.setattr(cli, "_stack_live", lambda name: True)
-    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["status", "nativeha-ubuntu"])
     assert result.exit_code == 2
     assert (
-        "pcmk-ubuntu is running without a version record; run `mqlab teardown pcmk-ubuntu` "
+        "nativeha-ubuntu is running without a version record; run `mqlab teardown nativeha-ubuntu` "
         "and re-bootstrap"
     ) in result.stderr
     assert calls == []  # refused before any phase probe
@@ -318,5 +315,5 @@ def test_status_all_stacks_view_is_gated_too(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_stack_live", lambda name: True)
     result = CliRunner().invoke(cli.app, ["status"])
     assert result.exit_code == 2
-    assert "run `mqlab teardown pcmk-ubuntu`" in result.stderr
+    assert "run `mqlab teardown nativeha-ubuntu`" in result.stderr
     assert calls == []

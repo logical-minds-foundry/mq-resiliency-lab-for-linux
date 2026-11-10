@@ -127,7 +127,7 @@ def test_obs_bakes_at_the_obs_node_size():
 
 @pytest.mark.parametrize(
     ("role", "expected"),
-    [("infra", (2, 2048)), ("mq-nativeha", (2, 2048)), ("pcmk", (2, 2048)), ("san", (2, 2048))],
+    [("infra", (2, 2048)), ("mq-nativeha", (2, 2048))],
 )
 def test_small_boxes_keep_the_old_bake_size(role, expected):
     size = p.bake_size(real_bake_topology(), role)

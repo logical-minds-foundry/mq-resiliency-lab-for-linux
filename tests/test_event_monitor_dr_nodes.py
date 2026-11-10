@@ -4,12 +4,12 @@ The collector is an MQ SERVICE object that lives in the queue manager and travel
 it, so after an HA or DR move it STARTCMDs the run.sh wrapper on whichever node now
 hosts the QM. That wrapper comes from the mq-event-monitor role's host prep (its
 main tasks, not `tasks_from: service`), which therefore has to run on every node of
-every QM group. #1624 found two stacks where it skipped the DR site (rdqm_b, pcmk_b):
+every QM group. #1624 found stacks where it skipped the DR site (e.g. rdqm_b):
 after a DR cutover the collector could not start and no MQ event reached Loki.
 
-The guard: for every stack in the topology, every QM group (all of its groups except
-the SAN groups, which host no QM) is targeted by some play in its provision tree that
-runs the host prep, directly or through a role that includes it.
+The guard: for every stack in the topology, every QM group (each of its groups hosts
+a QM) is targeted by some play in its provision tree that runs the host prep, directly
+or through a role that includes it.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ TOPOLOGY = REPO_ROOT / "lab" / "topology.yaml"
 # them at all. Temporary on purpose: test_pending_qm_groups_are_still_unprovisioned
 # fails once a play targets the group, which forces its removal here and puts it under
 # the guard below.
-# Empty since #1623 provisioned pcmk-drbd-ubuntu's DR site (pdrbd_b, via pdrbd-qm).
+# Empty: every stack's provision playbook builds both of its sites.
 PENDING_QM_GROUPS: set[str] = set()
 
 _ROLE_VERBS = (
@@ -104,12 +104,12 @@ def _targets(play: dict[str, Any], groups: set[str]) -> set[str]:
 
 def _stacks() -> dict[str, dict[str, Any]]:
     stacks = _load(TOPOLOGY)["stacks"]
-    assert len(stacks) >= 4, "stack discovery regressed"
+    assert len(stacks) >= 3, "stack discovery regressed"
     return stacks
 
 
 def _qm_groups(stack: dict[str, Any]) -> set[str]:
-    return {g for g in stack["groups"] if not g.startswith("san_")}
+    return set(stack["groups"])
 
 
 def test_every_qm_group_gets_the_event_collector_host_prep() -> None:

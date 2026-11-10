@@ -82,7 +82,7 @@ def _row_titles(board):
 def test_uid_prefix_and_helper():
     assert DASHBOARD_UID_PREFIX == "lab-qm-"
     assert qm_board_uid("NHAX") == "lab-qm-nhax"
-    assert qm_board_uid("pcmk") == "lab-qm-pcmk"
+    assert qm_board_uid("rdqm") == "lab-qm-rdqm"
 
 
 def test_board_uid_and_sections_present():
@@ -119,7 +119,7 @@ def test_names_are_derived_from_short_with_no_cross_stack_leak():
     assert 'channel="SVCQM.NHAXAPP"' in exprs  # RCVR ← svc
     # no other stack's app QM leaks into this board
     assert "OTHRAPP" not in json.dumps(board)
-    assert "PCMKAPP" not in json.dumps(board)
+    assert "RDQMAPP" not in json.dumps(board)
 
 
 def test_qm_band_binds_the_verified_metric_names():
@@ -249,7 +249,7 @@ def test_rename_short_makes_the_board_follow_it():
 
 
 def test_dashboard_path_is_per_qm_lowercased():
-    assert qm_dashboard_path("PCMK").name == "lab-qm-pcmk.json"
+    assert qm_dashboard_path("RDQM").name == "lab-qm-rdqm.json"
     assert qm_dashboard_path("nhau").name == "lab-qm-nhau.json"
 
 
@@ -262,7 +262,7 @@ def test_real_topology_smoke_one_valid_board_per_app_qm():
         assert path.name == f"{board['uid']}.json"
         # each real board renders as time-series trends
         assert any(p["type"] == "timeseries" for p in board["panels"])
-    assert {"lab-qm-pcmk", "lab-qm-rdqm", "lab-qm-nharc", "lab-qm-nhau"} <= uids
+    assert {"lab-qm-rdqm", "lab-qm-nharc", "lab-qm-nhau"} <= uids
 
 
 def test_write_renders_provisioned_stacks_only(monkeypatch, tmp_path):

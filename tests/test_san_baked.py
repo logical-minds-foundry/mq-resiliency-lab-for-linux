@@ -15,61 +15,30 @@ itself. These static checks pin that contract:
   the roles still work at bake time and on an un-baked host;
 - the kernel-modules package name is routed through the per-OS vars include, not
   hard-coded (26.04 has no linux-modules-extra);
-- the per-run main.yml runs the install half first;
-- the manifest hash digests bake-san.yml's role closure, and only the san box bakes the
-  SAN roles.
+- the per-run main.yml runs the install half first.
 """
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from mqlab import phases, topology, versions
-from tests.boxfleet import box_bakes, manifest_hash_args
+from mqlab import phases
 from tests.test_boot_trim_baked import _iter_tasks, _plays, _role_includes
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC = REPO_ROOT / "src"
 ANSIBLE = REPO_ROOT / "ansible"
 ROLES = ANSIBLE / "roles"
-MANIFEST_HASH = REPO_ROOT / "lab" / "boxes" / "_manifest-hash.sh"
 SAN_ROLES = ("drbd-san", "iscsi-target")
 OS_VARS_INCLUDE = "../../../tasks/os-vars.yml"
 
 
 def _load(path: Path) -> Any:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
-
-
-def _san_box() -> str:
-    catalog = versions.load_catalog()
-    return catalog.box("san", catalog.infra).name
-
-
-# --- the box ------------------------------------------------------------------------
-
-
-def test_san_nodes_resolve_to_baked_san_box(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(versions.instances, "read_record", lambda stack: None)
-    catalog = versions.load_catalog()
-    nb = versions.node_boxes(topology.load(), catalog)
-    assert nb["san-a"].name == nb["san-b"].name == f"san-{catalog.infra.token}"
-
-
-def test_san_role_bakes_bake_san_on_ubuntu_only() -> None:
-    catalog = versions.load_catalog()
-    assert catalog.roles["san"] == {
-        "bake": {"ubuntu": "san"},
-        "mq_bearing": False,
-        "components": ("mq-resiliency-observability",),
-    }
-    assert box_bakes()[_san_box()] == ("ubuntu", "san")
 
 
 # --- the retired deb cache ----------------------------------------------------------
@@ -207,44 +176,3 @@ def test_per_run_main_runs_the_install_half_first(role: str) -> None:
 def test_iscsi_target_install_half_is_the_os_adapter() -> None:
     (task,) = _load(ROLES / "iscsi-target" / "tasks" / "install.yml")
     assert task["ansible.builtin.include_tasks"] == "install-{{ ansible_facts['os_family'] }}.yml"
-
-
-# --- manifest-hash closure ----------------------------------------------------------
-
-
-def _hash(root: Path, box: str) -> str:
-    script = root / "lab" / "boxes" / "_manifest-hash.sh"
-    return subprocess.run(  # noqa: S603
-        [str(script), box, *manifest_hash_args(box)], check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
-@pytest.mark.parametrize(
-    "probe",
-    [
-        "drbd-san/tasks/install.yml",
-        "drbd-san/tasks/main.yml",
-        "drbd-san/vars/Ubuntu-24.yml",
-        "iscsi-target/tasks/install-Debian.yml",
-    ],
-)
-def test_san_role_edits_flip_only_the_san_box_hash(tmp_path: Path, probe: str) -> None:
-    """bake-san.yml's role closure enters the san box's manifest hash (an edit forces a
-    rebake), and no other box bakes the SAN roles. Runs against a scratch copy of the hash
-    inputs so the real tree is never mutated."""
-    (tmp_path / "lab" / "boxes").mkdir(parents=True)
-    shutil.copy2(MANIFEST_HASH, tmp_path / "lab" / "boxes" / MANIFEST_HASH.name)
-    shutil.copy2(REPO_ROOT / "lab" / "mq-version", tmp_path / "lab" / "mq-version")
-    shutil.copytree(ROLES, tmp_path / "ansible" / "roles")
-    shutil.copytree(ANSIBLE / "group_vars", tmp_path / "ansible" / "group_vars")
-    for bake in ANSIBLE.glob("bake-*.yml"):
-        shutil.copy2(bake, tmp_path / "ansible" / bake.name)
-
-    boxes = box_bakes()
-    before = {box: _hash(tmp_path, box) for box in boxes}
-    target = tmp_path / "ansible" / "roles" / probe
-    target.write_text(target.read_text(encoding="utf-8") + "# probe\n", encoding="utf-8")
-    after = {box: _hash(tmp_path, box) for box in boxes}
-
-    flipped = {box for box in boxes if before[box] != after[box]}
-    assert flipped == {_san_box()}

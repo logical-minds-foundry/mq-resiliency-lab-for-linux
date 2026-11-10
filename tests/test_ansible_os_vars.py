@@ -40,19 +40,19 @@ DISTRIBUTION = {"rhel": "RedHat", "ubuntu": "Ubuntu"}
 # mq-nativeha-spike runs on the reused rdqm-* RHEL slots. drbd-san (#1278) routes its
 # kernel-modules package name through the include.
 # INFRA / INFRA_MQ are not stacks: they stand for the catalog's `infra` / `infra_mq` OS,
-# which the shared boxes boot (the SAN targets' `san` box is an infra box, #1282).
+# which the shared boxes boot (#1282).
 INFRA = "infra"
 INFRA_MQ = "infra_mq"
 ROLE_STACKS = {
     "rdqm-install": ("rdqm-rhel",),
     "mq-nativeha": ("nativeha-rhel-crr",),
     "mq-nativeha-spike": ("rdqm-rhel",),
-    # The SAN targets belong to the pcmk-ubuntu stack's groups but boot the san box on
-    # the infra OS, so drbd-san needs a vars file for both.
-    "drbd-san": ("pcmk-ubuntu", INFRA),
-    # Every baked Ubuntu box runs cloud-init-trim (#1250): both Ubuntu stacks' boxes and
+    # drbd-san ran on a box on the infra OS; no catalogued stack uses it any more, but
+    # while the role ships it still includes os-vars, so its infra-OS file stays checked.
+    "drbd-san": (INFRA,),
+    # Every baked Ubuntu box runs cloud-init-trim (#1250): the Ubuntu stack's boxes and
     # the shared boxes on either shared OS (#1282).
-    "cloud-init-trim": ("nativeha-ubuntu", "pcmk-ubuntu", INFRA, INFRA_MQ),
+    "cloud-init-trim": ("nativeha-ubuntu", INFRA, INFRA_MQ),
 }
 
 

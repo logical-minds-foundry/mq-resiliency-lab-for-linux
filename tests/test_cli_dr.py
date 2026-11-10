@@ -59,15 +59,15 @@ _RDQM_TOPO = (
     "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
 )
 
-# A stack (pacemaker-san) that has a QM but declares no dr-cutover / dr-failback verb.
-_PCMK_TOPO = (
-    "nodes:\n  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
-    "groups:\n  pcmk_a: [pcmk-a1]\n"
-    "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n"
-    "    os_family: ubuntu\n    short: PCMK\n"
-    "    cluster_group: pcmk_a\n    groups: [pcmk_a]\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
-    "    verbs: { qm-status: { pcs: status resources } }\n"
+# A stack that has a QM but declares no dr-cutover / dr-failback verb.
+_NODR_TOPO = (
+    "nodes:\n  nha-rhel-crr-a1: {nics: {net-mgmt: 10.50.0.91}}\n"
+    "groups:\n  nha_rhel_crr_a: [nha-rhel-crr-a1]\n"
+    "stacks:\n  nativeha-rhel-crr:\n    mechanism: native-ha\n"
+    "    os_family: rhel\n    short: NHARC\n"
+    "    cluster_group: nha_rhel_crr_a\n    groups: [nha_rhel_crr_a]\n"
+    "    qm: {}\n"
+    "    verbs: { qm-status: { cmd: 'dspmq -m {qm}' } }\n"
     "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
 )
 
@@ -144,46 +144,48 @@ def test_dr_unknown_stack_exits_2(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("verb", ["cutover", "failback"])
 def test_dr_stack_without_dr_verb_exits_2(monkeypatch, tmp_path, verb):
-    _seed(monkeypatch, tmp_path, _PCMK_TOPO)
-    result = CliRunner().invoke(cli.app, ["dr", verb, "pcmk-ubuntu"])
+    _seed(monkeypatch, tmp_path, _NODR_TOPO)
+    result = CliRunner().invoke(cli.app, ["dr", verb, "nativeha-rhel-crr"])
     assert result.exit_code == 2
-    assert f"pcmk-ubuntu does not declare a dr-{verb} verb" in result.output
+    assert f"nativeha-rhel-crr does not declare a dr-{verb} verb" in result.output
 
 
 # --- per-stack DR verb dispatch (#1424, epic .github#310 Task 6a) ----------------------
 
-_PDRBD_TOPO = (
-    "nodes:\n  pdrbd-a1: {nics: {net-mgmt: 10.50.0.71}}\n"
-    "groups:\n  pdrbd_a: [pdrbd-a1]\n"
-    "stacks:\n  pcmk-drbd-ubuntu:\n    mechanism: pacemaker-drbd\n"
-    "    os_family: ubuntu\n    short: PDRBD\n"
-    "    cluster_group: pdrbd_a\n    groups: [pdrbd_a]\n"
-    "    qm: { vip: 10.10.1.170, vip_b: 10.10.2.170 }\n"
+# A playbook-kind DR stack. The committed nativeha-ubuntu verbs declare no rpo0; this
+# synthetic one does, so the drill's playbook wiring is exercised.
+_PLAYBOOK_TOPO = (
+    "nodes:\n  nha-ubuntu-a1: {nics: {net-mgmt: 10.50.0.11}}\n"
+    "groups:\n  nha_ubuntu_a: [nha-ubuntu-a1]\n"
+    "stacks:\n  nativeha-ubuntu:\n    mechanism: native-ha\n"
+    "    os_family: ubuntu\n    short: NHAU\n"
+    "    cluster_group: nha_ubuntu_a\n    groups: [nha_ubuntu_a]\n"
+    "    qm: {}\n"
     "    verbs:\n"
-    "      dr-cutover: { playbook: site-pdrbd-dr-switch.yml, rpo0: true }\n"
-    "      dr-failback: { playbook: site-pdrbd-dr-switch.yml, rpo0: true }\n"
+    "      dr-cutover: { playbook: site-nativeha-ubuntu-switchover.yml, rpo0: true }\n"
+    "      dr-failback: { playbook: site-nativeha-ubuntu-switchover.yml, rpo0: true }\n"
     "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
 )
 
 # A stack whose DR verb exists but does NOT implement the RPO-0 drill.
-_NORPO_TOPO = _PDRBD_TOPO.replace(", rpo0: true", "")
+_NORPO_TOPO = _PLAYBOOK_TOPO.replace(", rpo0: true", "")
 
 
 def test_dr_cutover_runs_playbook_verb_with_direction(monkeypatch, tmp_path):
-    _seed(monkeypatch, tmp_path, _PDRBD_TOPO)
+    _seed(monkeypatch, tmp_path, _PLAYBOOK_TOPO)
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["dr", "cutover", "pcmk-drbd-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["dr", "cutover", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     cmd = runner.recorded[-1]
     # the Task 6 contract: exactly these three extra-vars, run from ansible/.
     assert cmd.argv == [
         "ansible-playbook",
-        "site-pdrbd-dr-switch.yml",
+        "site-nativeha-ubuntu-switchover.yml",
         "-e",
         "dr_direction=a2b",
         "-e",
-        "qm_name=PDRBDAPP",
+        "qm_name=NHAUAPP",
         "-e",
         "rpo0_drill=false",
     ]
@@ -193,12 +195,12 @@ def test_dr_cutover_runs_playbook_verb_with_direction(monkeypatch, tmp_path):
 
 
 def test_dr_failback_playbook_rpo0_drill(monkeypatch, tmp_path):
-    _seed(monkeypatch, tmp_path, _PDRBD_TOPO)
+    _seed(monkeypatch, tmp_path, _PLAYBOOK_TOPO)
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["dr", "failback", "pcmk-drbd-ubuntu", "--rpo0-drill"])
+    result = CliRunner().invoke(cli.app, ["dr", "failback", "nativeha-ubuntu", "--rpo0-drill"])
     assert result.exit_code == 0, result.output
-    assert runner.recorded[-1].argv[-4:] == ["-e", "qm_name=PDRBDAPP", "-e", "rpo0_drill=true"]
+    assert runner.recorded[-1].argv[-4:] == ["-e", "qm_name=NHAUAPP", "-e", "rpo0_drill=true"]
     assert "dr_direction=b2a" in runner.recorded[-1].argv
 
 
@@ -207,7 +209,7 @@ def test_dr_rpo0_drill_refused_when_verb_does_not_declare_it(monkeypatch, tmp_pa
     _seed(monkeypatch, tmp_path, _NORPO_TOPO)
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda v, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["dr", verb, "pcmk-drbd-ubuntu", "--rpo0-drill"])
+    result = CliRunner().invoke(cli.app, ["dr", verb, "nativeha-ubuntu", "--rpo0-drill"])
     assert result.exit_code == 2
     assert "does not implement the RPO-0 drill" in result.output
     # never cut over without the check the operator asked for.
@@ -218,18 +220,18 @@ def test_dr_without_drill_runs_on_a_verb_without_rpo0(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path, _NORPO_TOPO)
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["dr", "cutover", "pcmk-drbd-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["dr", "cutover", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     assert runner.recorded[-1].argv[-1] == "rpo0_drill=false"
 
 
 def test_dr_unknown_verb_kind_exits_2(monkeypatch, tmp_path):
-    _seed(monkeypatch, tmp_path, _PDRBD_TOPO.replace("playbook: site-pdrbd", "pcs: site-pdrbd"))
+    _seed(monkeypatch, tmp_path, _PLAYBOOK_TOPO.replace("playbook: site-", "cmd: site-"))
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["dr", "cutover", "pcmk-drbd-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["dr", "cutover", "nativeha-ubuntu"])
     assert result.exit_code == 2
-    assert "unsupported dr-cutover kind 'pcs'" in result.output
+    assert "unsupported dr-cutover kind 'cmd'" in result.output
     assert runner.recorded == []
 
 
@@ -244,11 +246,12 @@ def test_real_topology_rdqm_declares_its_script_with_rpo0(verb):
 
 @pytest.mark.parametrize("impl", ["{ rpo0: true }", "{ script: a.sh, playbook: b.yml }"])
 def test_dr_verb_without_exactly_one_kind_exits_2(monkeypatch, tmp_path, impl):
-    topo = _PDRBD_TOPO.replace("{ playbook: site-pdrbd-dr-switch.yml, rpo0: true }", impl)
+    old = "{ playbook: site-nativeha-ubuntu-switchover.yml, rpo0: true }"
+    topo = _PLAYBOOK_TOPO.replace(old, impl)
     _seed(monkeypatch, tmp_path, topo)
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["dr", "cutover", "pcmk-drbd-ubuntu"])
+    result = CliRunner().invoke(cli.app, ["dr", "cutover", "nativeha-ubuntu"])
     assert result.exit_code == 2
     assert "must declare exactly one of script / playbook" in result.output
     assert runner.recorded == []

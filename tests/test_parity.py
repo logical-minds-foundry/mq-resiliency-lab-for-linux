@@ -13,8 +13,9 @@ from mqlab.parity import (
 )
 
 
-def test_pcmk_is_reference_backend_all_supported() -> None:
-    assert all(supported("pcmk-ubuntu", v) is Support.SUPPORTED for v in VERBS)
+def test_native_ha_arms_support_every_verb() -> None:
+    for arm in ("nativeha-rhel-crr", "nativeha-ubuntu"):
+        assert all(supported(arm, v) is Support.SUPPORTED for v in VERBS)
 
 
 def test_rdqm_starts_not_yet_everywhere() -> None:
@@ -25,12 +26,12 @@ def test_supported_unknown_raises() -> None:
     with pytest.raises(KeyError, match="unknown arm/verb"):
         supported("nope", "failover")
     with pytest.raises(KeyError, match="unknown arm/verb"):
-        supported("pcmk-ubuntu", "nope")
+        supported("nativeha-ubuntu", "nope")
 
 
 def test_render_markdown_has_a_row_per_verb_and_arm_columns() -> None:
     text = render_markdown()
-    assert "| verb | pcmk-ubuntu | rdqm-rhel |" in text
+    assert "| verb | rdqm-rhel | nativeha-rhel-crr | nativeha-ubuntu |" in text
     for v in VERBS:
         assert f"| {v} |" in text
     assert "not_yet" in text
@@ -39,26 +40,14 @@ def test_render_markdown_has_a_row_per_verb_and_arm_columns() -> None:
 
 def test_matrix_covers_exactly_the_declared_arms() -> None:
     assert set(MATRIX) == {
-        "pcmk-ubuntu",
         "rdqm-rhel",
         "nativeha-rhel-crr",
         "nativeha-ubuntu",
-        "pcmk-drbd-ubuntu",
     }
 
 
 def test_parity_command_prints_matrix() -> None:
     result = CliRunner().invoke(app, ["parity"])
     assert result.exit_code == 0
-    assert "pcmk-ubuntu" in result.stdout
+    assert "nativeha-ubuntu" in result.stdout
     assert "not_yet" in result.stdout
-
-
-def test_pdrbd_row_supports_only_the_live_proven_dr_verbs() -> None:
-    # pcmk-drbd-ubuntu (epic .github#310): Task 6 (#1428) proved the DR verbs live; the
-    # rest stay NOT_YET until Task 9 sets them from drill evidence.
-    row = MATRIX["pcmk-drbd-ubuntu"]
-    assert set(row) == set(VERBS)
-    dr = {"dr-bootstrap", "cutover", "failback"}
-    assert {v for v, s in row.items() if s is Support.SUPPORTED} == dr
-    assert {row[v] for v in set(VERBS) - dr} == {Support.NOT_YET}

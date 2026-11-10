@@ -1,10 +1,9 @@
 """mq-event-monitor resolves the QM's qm.ini from MQ, not a hard-coded path (#1344).
 
 The #809 log-type verify slurps the live QM's qm.ini. It used to read the default
-``/var/mqm/qmgrs/<QM>/qm.ini``, which does not exist for a ``crtmqm -md`` QM: the
-Pacemaker arm creates PCMKAPP with ``-md /mqshared/qmgrs``, so provisioning failed on
-the creation node. The role now reads the QueueManager stanza (``dspmqinf -o stanza``)
-and uses DataPath, else ``<Prefix>/qmgrs/<Directory>``, else fails loudly.
+``/var/mqm/qmgrs/<QM>/qm.ini``, which does not exist for a ``crtmqm -md`` QM, so
+provisioning failed on the creation node. The role now reads the QueueManager stanza
+(``dspmqinf -o stanza``) and uses DataPath, else ``<Prefix>/qmgrs/<Directory>``, else fails loudly.
 
 These checks pin the task shape statically and render the role's OWN parse expressions,
 taken from service.yml, through Ansible's templar against sample ``dspmqinf`` output. The
@@ -41,10 +40,10 @@ QueueManager:
 """
 MD_STANZA = """\
 QueueManager:
-   Name=PCMKAPP
+   Name=MDQM
    Prefix=/var/mqm
-   Directory=PCMKAPP
-   DataPath=/mqshared/qmgrs/PCMKAPP
+   Directory=MDQM
+   DataPath=/mqshared/qmgrs/MDQM
    InstallationName=Installation1
 """
 RDQM_STANZA = """\
@@ -88,8 +87,8 @@ def _resolve(stdout: str) -> str:
     [
         # Native HA / SVCQM: no DataPath -> exactly the old default path.
         (DEFAULT_PATH_STANZA, "/var/mqm/qmgrs/NHAUAPP"),
-        # Pacemaker: crtmqm -md /mqshared/qmgrs.
-        (MD_STANZA, "/mqshared/qmgrs/PCMKAPP"),
+        # A QM created with crtmqm -md /mqshared/qmgrs.
+        (MD_STANZA, "/mqshared/qmgrs/MDQM"),
         # RDQM: DataPath on the DRBD volume (what rdqm-active-node already uses).
         (RDQM_STANZA, "/var/mqm/vols/rdqmapp/qmgr/rdqmapp"),
         (IBM_EXAMPLE_STANZA, "/MQHA/qmgrs/QM!NAME"),

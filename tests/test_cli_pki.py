@@ -20,7 +20,7 @@ _FIXED_CNS = {"app-client", "mq_prometheus", "mqweb", "svc-responder"}
 
 # The app-org QM CNs derived from each stack's #351 short token (<short>APP), and
 # the single shared svc-org counterparty CN (SVCQM) every stack talks to (#446).
-_APP_CNS = {"PCMKAPP", "RDQMAPP", "NHARCAPP"}
+_APP_CNS = {"NHAUAPP", "RDQMAPP", "NHARCAPP"}
 _SVC_CNS = {"SVCQM"}
 
 # The full entity set the stack model produces for this topology.
@@ -31,8 +31,8 @@ _PKI_TOPO = (
     "nodes: {}\n"
     "groups: {}\n"
     "stacks:\n"
-    "  pcmk-ubuntu:\n"
-    "    mechanism: pacemaker-san\n    os_family: ubuntu\n    short: PCMK\n"
+    "  nativeha-ubuntu:\n"
+    "    mechanism: native-ha\n    os_family: ubuntu\n    short: NHAU\n"
     "    groups: []\n    qm: {}\n"
     "  rdqm-rhel:\n"
     "    mechanism: rdqm\n    os_family: rhel\n    short: RDQM\n"
@@ -81,7 +81,7 @@ def test_pki_issue_passes_pki_only_extra_var(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path, _PKI_TOPO)
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["pki", "issue", "PCMKAPP"])
+    result = CliRunner().invoke(cli.app, ["pki", "issue", "NHAUAPP"])
     assert result.exit_code == 0
     assert runner.recorded[-1].argv == [
         "ansible-playbook",
@@ -91,7 +91,7 @@ def test_pki_issue_passes_pki_only_extra_var(monkeypatch, tmp_path):
         "-i",
         "localhost,",
         "-e",
-        "pki_only=PCMKAPP",
+        "pki_only=NHAUAPP",
     ]
     # Entities file must have been rendered before the playbook ran.
     assert (tmp_path / "build" / "work" / "pki" / "entities.json").exists()
@@ -101,7 +101,7 @@ def test_pki_list_prints_entities_from_topology(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path, _PKI_TOPO)
     result = CliRunner().invoke(cli.app, ["pki", "list"])
     assert result.exit_code == 0
-    assert "PCMKAPP" in result.output
+    assert "NHAUAPP" in result.output
     assert "app-org" in result.output
 
 
@@ -113,7 +113,7 @@ def test_render_pki_entities_includes_derived_qm_cns(monkeypatch, tmp_path):
     path = cli._render_pki_entities()
     data = json.loads(path.read_text())
     cns = {e["cn"]: e["org"] for e in data}
-    assert cns["PCMKAPP"] == "app-org"
+    assert cns["NHAUAPP"] == "app-org"
     assert cns["SVCQM"] == "svc-org"  # the single shared counterparty (#446)
 
 
@@ -171,13 +171,13 @@ def test_render_pki_entities_dedupes_repeated_svc_cn(monkeypatch, tmp_path):
     topo = (
         "nodes: {}\ngroups: {}\n"
         "stacks:\n"
-        "  a:\n    mechanism: m\n    os_family: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
-        "  b:\n    mechanism: m\n    os_family: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
+        "  a:\n    mechanism: m\n    os_family: o\n    short: NHAU\n    groups: []\n    qm: {}\n"
+        "  b:\n    mechanism: m\n    os_family: o\n    short: NHAU\n    groups: []\n    qm: {}\n"
         "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     _seed(monkeypatch, tmp_path, topo)
     data = json.loads(cli._render_pki_entities().read_text())
-    assert sum(1 for e in data if e["cn"] == "PCMKAPP") == 1
+    assert sum(1 for e in data if e["cn"] == "NHAUAPP") == 1
     assert sum(1 for e in data if e["cn"] == "SVCQM") == 1
 
 

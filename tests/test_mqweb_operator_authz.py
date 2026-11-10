@@ -115,7 +115,7 @@ def _accounts_plays(path: Path) -> list[dict[str, Any]]:
 # stack is not bootstrappable, so it hosts no QM to guard. The entry is temporary on
 # purpose: test_pending_provision_playbooks_are_still_absent fails the moment the
 # playbook lands, which forces its removal here and puts it under the guards below.
-# Empty since #1427 landed ansible/site-pdrbd.yml (pcmk-drbd-ubuntu).
+# Empty: every declared stack's provision playbook has landed.
 PENDING_PROVISION: set[str] = set()
 
 
@@ -137,7 +137,7 @@ def test_every_qm_play_applies_authz_accounts() -> None:
     # Review Focus 4: every stack's provision playbook, and the svc-sim play, apply
     # mq-authz-accounts, so a new arm cannot silently lack the mqoperator OS account.
     playbooks = _provision_playbooks()
-    assert len(playbooks) >= 4, "stack discovery regressed"
+    assert len(playbooks) >= 3, "stack discovery regressed"
     playbooks.add(SHARED)
     for pb in sorted(playbooks):
         assert "mq-authz-accounts" in _plays_roles(pb), f"{pb.name} lacks mq-authz-accounts"

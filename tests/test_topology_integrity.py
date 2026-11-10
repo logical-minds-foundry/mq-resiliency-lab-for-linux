@@ -38,14 +38,6 @@ def test_every_stack_group_is_defined():
             assert g in groups, f"{stack.name} references undefined group {g}"
 
 
-def test_pcmk_stack_declares_hacluster_and_mqweb_secrets():
-    # the QM-bearing pcmk stack carries the cluster secret AND mqweb_aes_passphrase, the
-    # IBM S16 AES-key passphrase that replaced mqweb_admin_password (epic .github#341
-    # spec §2.2, #1500); mqweb is provisioned where it is injected
-    pcmk = lab_stacks()["pcmk-ubuntu"]
-    assert pcmk.secrets == ["pcmk_hacluster_password", "mqweb_aes_passphrase"]
-
-
 def test_every_stack_carries_the_mqweb_aes_passphrase_not_the_retired_admin_secret():
     # #1500: every QM-bearing stack runs mqweb, whose registry is encoded with the AES key
     # made from this passphrase; the old plaintext admin password is retired everywhere.
@@ -73,8 +65,8 @@ def test_real_topology_renders_a_valid_dashboard():
     dash = json.loads(lab_dashboard())  # raises DashboardError on an unknown ROWS group
     assert dash["uid"] == DASHBOARD_UID
     row_titles = [p["title"] for p in dash["panels"] if p["type"] == "row"]
-    # every curated VM row is present against the real groups (SAN folds into PCMK)
-    assert "VMs · PCMK · A" in row_titles and "VMs · RDQM · B" in row_titles
+    # every curated VM row is present against the real groups
+    assert "VMs · RDQM · A" in row_titles and "VMs · RDQM · B" in row_titles
 
 
 def test_network_sections_cover_exactly_the_declared_networks():
@@ -83,27 +75,6 @@ def test_network_sections_cover_exactly_the_declared_networks():
 
     curated = {net for _, nets in NET_SECTIONS for net in nets}
     assert curated == set(lab_net_names()), "NET_SECTIONS must match lab/networks/net-*.xml"
-
-
-def test_pcmk_nodes_attach_to_net_ext():
-    """Both Pacemaker sites carry a net-ext NIC so the partner VIP (mq_vip_ext)
-    can bind on the inter-business WAN (#146)."""
-    import yaml
-
-    from mqlab.paths import repo_root
-
-    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    nodes = topo["nodes"]
-    expected = {
-        "pcmk-a1": "10.60.0.51",
-        "pcmk-a2": "10.60.0.52",
-        "pcmk-a3": "10.60.0.53",
-        "pcmk-b1": "10.60.0.61",
-        "pcmk-b2": "10.60.0.62",
-        "pcmk-b3": "10.60.0.63",
-    }
-    for host, ip in expected.items():
-        assert nodes[host]["nics"].get("net-ext") == ip, f"{host} missing net-ext {ip}"
 
 
 def test_svc_sim_on_net_ext():
@@ -117,20 +88,8 @@ def test_svc_sim_on_net_ext():
     assert topo["nodes"]["svc-sim"]["nics"].get("net-ext") == "10.60.0.50"
 
 
-def test_pcmk_stack_composed():
-    """The pcmk-ubuntu stack is full HADR; its QM wires to the SVC counterparty (#147)."""
-    dist = lab_stacks()["pcmk-ubuntu"]
-    assert dist.groups == ["san_a", "pcmk_a", "san_b", "pcmk_b"]
-    assert dist.provision == "ansible/site-pcmk.yml"
-    assert dist.qm.qm_app == "PCMKAPP"  # short-derived (#351)
-    assert dist.qm.qm_svc == "SVCQM"  # single shared counterparty (#446)
-    assert dist.qm.chl_to_svc == "PCMKAPP.SVCQM"
-    assert dist.qm.req_queue == "PCMK.SVC.REQUEST"  # this stack's own queue on SVCQM
-    assert dist.qm.svc_conn == "10.60.0.50"
-
-
 def test_rdqm_stack_composed():
-    """The RDQM stack mirrors pcmk's QM wiring, over the RDQM substrate (#216)."""
+    """The RDQM stack is full HADR; its QM wires to the SVC counterparty (#147, #216)."""
     s = lab_stacks()["rdqm-rhel"]
     assert s.mechanism == "rdqm"
     assert s.groups == ["rdqm_a", "rdqm_b"]

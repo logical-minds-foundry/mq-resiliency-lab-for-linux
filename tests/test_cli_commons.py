@@ -24,17 +24,13 @@ from tests.fakes import RecordingRunner, ScriptedResult
 
 # ---------------------------------------------------------------------------
 # Topology: a full commons topology (obs_box + probe + svc + app groups).
-# Must include all groups referenced in dashboard.ROWS (pcmk_a, san_a, pcmk_b,
-# san_b, rdqm_a, rdqm_b, app, svc, obs_box, probe) so lab_dashboard() doesn't
+# Must include all groups referenced in dashboard.ROWS (rdqm_a, rdqm_b, app, svc,
+# obs_box, probe) so lab_dashboard() doesn't
 # raise DashboardError("unknown group in ROWS: …") during _obs_up_steps render.
 # Nodes require nics.net-mgmt so render_inventory doesn't raise.
 # ---------------------------------------------------------------------------
 TOPO = (
     "nodes:\n"
-    "  san-a:      {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
-    "  san-b:      {box: san, nics: {net-mgmt: 10.50.0.6}}\n"
-    "  pcmk-a1:    {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
-    "  pcmk-b1:    {box: pcmk, nics: {net-mgmt: 10.50.0.61}}\n"
     "  rdqm-a1:    {box: mq-rdqm, nics: {net-mgmt: 10.50.0.31}}\n"
     "  rdqm-b1:    {box: mq-rdqm, nics: {net-mgmt: 10.50.0.41}}\n"
     "  obs:        {box: obs, nics: {net-mgmt: 10.50.0.2}}\n"
@@ -42,10 +38,6 @@ TOPO = (
     "  svc-sim:    {box: mq-client, nics: {net-mgmt: 10.50.0.50}}\n"
     "  app-client: {box: mq-client, nics: {net-mgmt: 10.50.0.60}}\n"
     "groups:\n"
-    "  san_a:   [san-a]\n"
-    "  san_b:   [san-b]\n"
-    "  pcmk_a:  [pcmk-a1]\n"
-    "  pcmk_b:  [pcmk-b1]\n"
     "  rdqm_a:  [rdqm-a1]\n"
     "  rdqm_b:  [rdqm-b1]\n"
     "  obs_box: [obs]\n"
@@ -55,9 +47,6 @@ TOPO = (
     # Stack-role nodes run their stack's OS, so the version layer needs each one owned
     # by exactly one stack (epic .github#280).
     "stacks:\n"
-    "  pcmk-ubuntu:\n"
-    "    mechanism: pacemaker-san\n    os_family: ubuntu\n    short: PCMK\n"
-    "    groups: [san_a, pcmk_a, san_b, pcmk_b]\n"
     "  rdqm-rhel:\n"
     "    mechanism: rdqm\n    os_family: rhel\n    short: RDQM\n    groups: [rdqm_a, rdqm_b]\n"
     "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
@@ -236,10 +225,6 @@ def test_commons_up_no_extra_step_when_only_obs_probe(monkeypatch, tmp_path):
     (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  san-a:      {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
-        "  san-b:      {box: san, nics: {net-mgmt: 10.50.0.6}}\n"
-        "  pcmk-a1:    {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
-        "  pcmk-b1:    {box: pcmk, nics: {net-mgmt: 10.50.0.61}}\n"
         "  rdqm-a1:    {box: mq-rdqm, nics: {net-mgmt: 10.50.0.31}}\n"
         "  rdqm-b1:    {box: mq-rdqm, nics: {net-mgmt: 10.50.0.41}}\n"
         "  svc-sim:    {box: mq-client, nics: {net-mgmt: 10.50.0.50}}\n"
@@ -247,8 +232,6 @@ def test_commons_up_no_extra_step_when_only_obs_probe(monkeypatch, tmp_path):
         "  obs:        {box: obs, nics: {net-mgmt: 10.50.0.2}}\n"
         "  mon-probe:  {box: mq-client, nics: {net-mgmt: 10.50.0.3}}\n"
         "groups:\n"
-        "  san_a: [san-a]\n  san_b: [san-b]\n"
-        "  pcmk_a: [pcmk-a1]\n  pcmk_b: [pcmk-b1]\n"
         "  rdqm_a: [rdqm-a1]\n  rdqm_b: [rdqm-b1]\n"
         "  svc: [svc-sim]\n  app: [app-client]\n"
         "  obs_box: [obs]\n  probe: [mon-probe]\n"
