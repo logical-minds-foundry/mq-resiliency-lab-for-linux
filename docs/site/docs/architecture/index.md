@@ -4,7 +4,8 @@ This page walks the lab from the outside in: the host machine, the virtual
 machines on it, the network fabric and node fleet inside the lab VM, and
 finally the MQ-service arms built on top. The lab runs **two HA/DR
 mechanisms** — RDQM (replicated-storage HA) and Native HA (log-replicated HA) —
-across **three arms** (Native HA runs on both Ubuntu and RHEL), each a full **3+3** stack (a 3-node group in Data Center A with
+across **three arms** (Native HA runs on both Ubuntu and RHEL), each a full
+**3+3** stack (a 3-node group in Data Center A with
 an asynchronous DR/CRR relationship to a matching 3-node group in Data Center B),
 all exchanging messages with a simulated cross-business counterparty (`svc-sim`)
 over distributed queuing. Everything shown here is

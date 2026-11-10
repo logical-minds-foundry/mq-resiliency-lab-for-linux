@@ -89,7 +89,8 @@ planes are attached per role. The management plane is deliberately non-transit
 | `net-wan` | `10.99.0.0/24` | Cross-site WAN (DR/CRR replication) |
 | `net-ext` | `10.60.0.0/24` | Inter-business WAN to the `svc-sim` counterparty |
 
-The guest fleet is the three 3+3 stacks (18 nodes) and six shared commons (`obs`, `mon-probe`, `svc-sim`, `app-client`,
+The guest fleet is the three 3+3 stacks (18 nodes) and six shared commons
+(`obs`, `mon-probe`, `svc-sim`, `app-client`,
 `infra-client`, `infra-svc`). The single-node OpenSearch log-search tier runs on
 `obs` (see
 [Architecture](../architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch));

@@ -100,7 +100,8 @@ the companion tools `mqlab` calls by bare name resolve. (Activating the venv wit
 `. .venv/bin/activate` works too, and then a bare `mqlab …` does.)
 `uv run mqlab bootstrap nativeha-ubuntu` sequences the whole bring-up — the
 canonical starting arm is **`nativeha-ubuntu`** (Native HA on Ubuntu, the one
-stack that needs no RHEL subscription and no RDQM entitlement) — and leaves you with a **running queue manager**. See
+stack that needs no RHEL subscription and no RDQM entitlement) — and leaves you
+with a **running queue manager**. See
 [Getting Started](docs/site/docs/getting-started.md) to send your first message
 and watch it survive a failover.
 

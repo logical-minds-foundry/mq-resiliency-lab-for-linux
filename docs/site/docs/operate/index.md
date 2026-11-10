@@ -123,7 +123,8 @@ app-client                     our HA queue manager            svc-sim
 - **Requester (Business A).** The `mq-app-requester` systemd unit on `app-client`
   drives an always-on request/reply stream (fixed-rate, `APP.SVRCONN`) at the app
   queue manager's **data-plane address** — the floating VIP on the RDQM arm, or
-  the active-instance CONNAME list on the Native HA arms (which have no VIP). It publishes a node-exporter round-trip metric
+  the active-instance CONNAME list on the Native HA arms (which have no VIP). It
+  publishes a node-exporter round-trip metric
   (`app_roundtrip_total`, `app_roundtrip_failures_total`, `app_roundtrip_latency_ms`)
   and logs each round trip to journald → Loki.
 - **Responder (Business B / SVC).** One shared `SVCQM` on `svc-sim` hosts each
