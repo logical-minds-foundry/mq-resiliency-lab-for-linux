@@ -6,7 +6,6 @@
 # paths only (role mq-qm-reload):
 #   native-ha: `systemctl reload mqmonitor@<QM>` on the active instance
 #   rdqm:      `endmqm -r` then `strmqm` on the RDQM's primary node
-# The Pacemaker arm has no honest equivalent; its topology verb refuses instead.
 #
 # The CLI passes every input (nothing here defaults a stack's identity):
 #   -e qm_stack=<stack> -e qm_name=<QM> -e qm_mechanism=<native-ha|rdqm>

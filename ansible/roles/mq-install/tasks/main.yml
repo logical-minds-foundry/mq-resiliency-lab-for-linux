@@ -6,7 +6,7 @@
 # present), so gate the ~700MB tar copy + unpack on the INSTALLED marker. Keying only on
 # the /tmp unpack dir (wiped on boot) made a baked box re-copy + re-unpack the tarball
 # EVERY run (~4.5 min) — the offender #659 eliminates. A baked box skips it entirely; the
-# from-scratch (un-baked) Ubuntu MQ nodes (nativeha-ubuntu, pcmk-ubuntu) still install.
+# from-scratch (un-baked) Ubuntu MQ nodes (nativeha-ubuntu) still install.
 - name: check for an already-installed MQ (skip the baked install)
   ansible.builtin.stat:
     path: /opt/mqm/inc/cmqc.h
@@ -25,7 +25,7 @@
     src: "{{ mq_media_dir }}/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_facts['architecture'] == 'aarch64' else 'X64' }}.tar.gz"
     dest: "{{ lab_stage_dir }}/mqadv.tar.gz"
     mode: "0644"
-  # root: lab_stage_dir is root-owned 0755, and the pcmk plays apply this role without a
+  # root: lab_stage_dir is root-owned 0755, and a play may apply this role without a
   # play-level become (/tmp was world-writable, so the copy used to work as vagrant).
   become: true
   when: not mq_installed.stat.exists

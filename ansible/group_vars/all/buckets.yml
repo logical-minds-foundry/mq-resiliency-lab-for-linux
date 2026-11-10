@@ -4,7 +4,7 @@
 # Never derive a build/<bucket> path from `playbook_dir` or a repo root: in a git worktree
 # whose shared-bucket symlinks are not wired yet, `{{ playbook_dir }}/../build/state` is a
 # fresh worktree-local directory, so a write there forks the live-lab state (secrets, PKI,
-# fence key) away from the one shared bucket. Resolve through the single authority:
+# mqweb state) away from the one shared bucket. Resolve through the single authority:
 #   1. MQLAB_<BUCKET>_DIR, which every mqlab verb exports to the commands it spawns;
 #   2. else `mqlab build path <bucket>` (the same buildenv code). ansible-playbook lives in
 #      the mqlab venv, so mqlab is on PATH wherever a play can run at all.

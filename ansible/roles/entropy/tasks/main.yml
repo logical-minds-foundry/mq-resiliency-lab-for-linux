@@ -24,8 +24,7 @@
 # Refresh the package cache in the SAME task as the install: a freshly-built bake box has
 # a stale/empty apt cache, so a bare `package` install fails with "No package matching
 # 'haveged' is available" even though haveged is in Ubuntu universe (VAL #1177 bake fail,
-# #1192). Every other apt-installing bake role does `update_cache: true` (loki, grafana,
-# pcmk-*); pcmk installs pacemaker — also universe — this way, proving universe is enabled.
+# #1192). Every other apt-installing bake role does `update_cache: true` (loki, grafana).
 - name: install the entropy daemon (Debian — haveged from universe)
   ansible.builtin.apt:
     name: "{{ entropy_pkg }}"

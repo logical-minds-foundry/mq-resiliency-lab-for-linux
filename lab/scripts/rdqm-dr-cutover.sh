@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # lab/scripts/rdqm-dr-cutover.sh - controlled cross-site cutover/failback for the RDQM arm.
-# RDQM wraps the work in two rdqmdr commands (vs the Pacemaker arm's multi-step
-# pcmk-dr-cutover.sh): quiesce the live primary, promote the recovery primary, then re-add
+# RDQM wraps the work in two rdqmdr commands: quiesce the live primary, promote the recovery primary, then re-add
 # the single floating IP at the new live site. The QM's objects + messages travel with DR
 # replication, so the recovery site needs no content re-apply — only its VIP.
 #

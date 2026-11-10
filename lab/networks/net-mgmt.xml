@@ -1,6 +1,6 @@
 <!-- lab/networks/net-mgmt.xml — operator/Ansible management net.
      Host-only: no <forward>, no DHCP. Kept off the modeled
-     data/heartbeat/SAN planes so management traffic never pollutes the model. -->
+     data/heartbeat planes so management traffic never pollutes the model. -->
 <network>
   <name>net-mgmt</name>
   <bridge name="virbr-mgmt"/>

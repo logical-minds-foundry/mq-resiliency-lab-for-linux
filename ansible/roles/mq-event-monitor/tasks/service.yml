@@ -1,6 +1,6 @@
 ---
 # MQ event monitoring — QM-level MQSC (#514 enable + #515 SERVICE define). Runs ONCE on
-# the active instance; the objects replicate (raft / DRBD / shared LUN) and travel with
+# the active instance; the objects replicate (raft / DRBD) and travel with
 # the QM. Host-prep (main.yml: wrapper + asserts) must have run on every failover-capable
 # node first. Requires: qmgr_name; optional mq_event_perf_queues.
 #
@@ -23,9 +23,8 @@
 #
 # The live QM's qm.ini is the authority; the declaration is checked against it, never trusted over
 # it. WHERE qm.ini lives is resolved from MQ itself, never assumed (#1344): the default
-# /var/mqm/qmgrs/<QM> is wrong for a `crtmqm -md` QM — the Pacemaker arm creates PCMKAPP with
-# `-md /mqshared/qmgrs`, so its qm.ini is /mqshared/qmgrs/PCMKAPP/qm.ini on the node with the LUN
-# mounted. The QM's QueueManager stanza (`dspmqinf -o stanza`, its mqs.ini entry) is the authority:
+# /var/mqm/qmgrs/<QM> is wrong for a QM whose data directory lives elsewhere (RDQM's DataPath on
+# the DRBD volume, or any `crtmqm -md` QM). The QM's QueueManager stanza (`dspmqinf -o stanza`, its mqs.ini entry) is the authority:
 # DataPath is "the complete path, including the name of the queue manager data directory" and, if
 # specified, "takes precedence over any value in the Prefix attribute"; without it, MQ builds the
 # data directory under <Prefix>/qmgrs, named by Directory (the transformed QM name). IBM MQ 10.0:
@@ -33,8 +32,7 @@
 #   https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=multiplatforms-sharing-mq-files
 # Every caller runs this file on the ONE node where the QM is live and its data directory is
 # reachable: Native HA's active instance (each instance keeps its own raft-replicated copy at the
-# default path), RDQM's active node (DataPath on the DRBD volume), the pcmk creation node (LUN
-# mounted, QM started for this step), and SVCQM's single host. A default-path QM resolves to
+# default path), RDQM's active node (DataPath on the DRBD volume), and SVCQM's single host. A default-path QM resolves to
 # exactly the old /var/mqm/qmgrs/<QM>.
 - name: read the queue manager's QueueManager stanza (its data directory) (#1344)
   ansible.builtin.command:

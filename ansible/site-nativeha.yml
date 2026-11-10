@@ -1,5 +1,5 @@
 # One full-HADR provision for the nativeha-rhel-crr stack (#350 Task 2). Native HA is
-# the compositional template; this aligns it to the same shape as the pcmk/rdqm
+# the compositional template; this aligns it to the same shape as the rdqm
 # stacks. Composed from building blocks (move, don't rewrite):
 #   1. _nativeha-cluster-ha.yml    — live site-A Native HA group
 #   2. (folded qm-create)          — our-side inter-QM + app MQSC on the active
@@ -60,7 +60,7 @@
 # QM can run — the Live group and the CRR Recovery group. The role declares every
 # authz_accounts principal; this arm applies no other OAM grants today, so only mqoperator
 # is used here. Under `bootstrap --no-dr` (#188) site B is absent, so drop nha_rhel_crr_b
-# (as the pcmk/rdqm/nativeha-ubuntu accounts plays do); the default keeps both sites.
+# (as the rdqm/nativeha-ubuntu accounts plays do); the default keeps both sites.
 - name: authz accounts on every Native HA instance (Live + Recovery) (#1501)
   hosts: "nha_rhel_crr_a{{ ':nha_rhel_crr_b' if (dr_enabled | default(true) | bool) else '' }}"
   become: true
@@ -69,7 +69,7 @@
 # Folded qm-create (#350 Task 2 step 2): our-side inter-QM + app MQSC on the ACTIVE
 # Native HA instance. runmqsc must run on the active instance; Native HA then
 # replicates the objects to all instances via raft. Mirrors the RDQM arm's our-side
-# MQSC (rdqm-qm-create.sh) and the pcmk arm's inter-qm.mqsc.j2. Body moved verbatim
+# MQSC (rdqm-qm-create.sh). Body moved verbatim
 # from the former site-nativeha-distributed.yml.
 - hosts: nha_rhel_crr_a
   become: true
@@ -159,7 +159,7 @@
     # of the three holds the QM) — NOT another arm's range.
     our_conn: "nha-rhel-crr-a1-ext.client.com(1414),nha-rhel-crr-a2-ext.client.com(1414),nha-rhel-crr-a3-ext.client.com(1414)"
     # The app host reaches the app QM on the data plane; Native HA has no VIP, so it
-    # lists the site-A instances. APP.SVRCONN is mutual-TLS here (matches pcmk), so
+    # lists the site-A instances. APP.SVRCONN is mutual-TLS here (as on rdqm), so
     # the app requester connects over TLS -> app_tls true. (#411)
     app_conn: "nha-rhel-crr-a1-data-a.client.com(1414),nha-rhel-crr-a2-data-a.client.com(1414),nha-rhel-crr-a3-data-a.client.com(1414)"
     app_tls: true

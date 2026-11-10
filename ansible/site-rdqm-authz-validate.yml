@@ -1,7 +1,6 @@
 ---
 # Stage 2 authorization validation for the rdqm arm (#74 / #620). The RDQM (RHEL,
-# DRBD + Pacemaker) peer of site-pcmk-authz-validate.yml / site-nativeha-ubuntu-authz-
-# validate.yml: induced-denial + positive + post-failover, run against the live,
+# DRBD + Pacemaker) peer of site-nativeha-ubuntu-authz-validate.yml: induced-denial + positive + post-failover, run against the live,
 # authorized rdqm-rhel arm. Harness CODE that IS the live-run evidence source for #620
 # (this repo has no behavioural lint — the running, authorized arm + a one-pass bring-up
 # is the epic gate).
@@ -17,7 +16,7 @@
 #   * failover is induced the NATIVE way (rdqmadm/pcs) between the --tags core and
 #     --tags postfail passes — the mqlab failover verb is NOT_YET; see the RUN block.
 #
-# Induced checks (mirror pcmk/nativeha N1/N3 + positive + post-failover):
+# Induced checks (mirror nativeha N1/N3 + positive + post-failover):
 #   N1  mqmon (OU=ops via MON.SVRCONN) MQPUT APP.REPLY   -> DENIED 2035 (monitoring is
 #       read-only: dsp/inq/sub, no put/get).
 #   N3  mqapp (OU=apps via APP.SVRCONN) MQGET SVC.REQUEST -> DENIED 2035 (least privilege).
@@ -32,7 +31,7 @@
 # KNOWN-UNKNOWNS -- grounded in the current roles:
 #   (1) mon_keyrepo -- the OU=ops (mqmon) keystore mq_prometheus is on mon-probe
 #       (/var/mqm/ssl/mq_prometheus/, owner mqm), NOT the app host. The first play
-#       fetches it from mon-probe and stages it on the app host (as pcmk #792 / nativeha).
+#       fetches it from mon-probe and stages it on the app host (#792, as nativeha).
 #   (2) positive uses mq-app-requester --count 1 (exit 0 on a reply). app-client keystore
 #       (/home/vagrant/ssl/key, label app-client) is placed by roles/mq-client (shared).
 #   (3) app_conn is the site-A then site-B data VIP, as site-rdqm.yml (#1622).

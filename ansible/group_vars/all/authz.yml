@@ -47,7 +47,7 @@ authz_grants:
 # mq-bench (#1512): the Native HA persistent-commit benchmark PUTs to its OWN queue,
 # BENCH.COMMIT, as the app-client identity (mqapp), and inquires its depth. A separate
 # list, not authz_grants: only the Native HA arms define BENCH.COMMIT (site-nativeha*.yml),
-# and setmqaut on a queue that does not exist fails, so the pcmk/rdqm arms that apply
+# and setmqaut on a queue that does not exist fails, so the rdqm arm, which applies
 # authz_grants must not see it. APP.REPLY's posture (mqapp get-only) is unchanged.
 authz_bench_grants:
   - { group: mqapp, object_type: queue, object: "BENCH.COMMIT", authorities: "+put +inq" }
@@ -56,7 +56,7 @@ authz_bench_grants:
 # of the Phase-0 observability doc (#943 / .github#173), expressed as MQSC SET AUTHREC
 # (NOT setmqaut) and rendered into authz.mqsc.j2 so the authority travels co-located with
 # the object definitions (repo rule, 2026-08-06). Arm-agnostic: every arm that renders
-# authz.mqsc.j2 (nativeha-ubuntu, pcmk, rdqm) gets the identical profile.
+# authz.mqsc.j2 (nativeha-ubuntu, rdqm) gets the identical profile.
 #
 # The exporter is NOT pure pub/sub: at startup it opens SYSTEM.ADMIN.COMMAND.QUEUE (+put)
 # and issues PCF DISPLAY to expand its monitoredQueues/Channels patterns, replying on a

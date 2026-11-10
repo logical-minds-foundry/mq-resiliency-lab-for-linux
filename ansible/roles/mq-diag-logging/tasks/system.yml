@@ -5,7 +5,7 @@
 #     `crtmqm -sx` validates the template-derived qm.ini DiagnosticMessages against the
 #     mqs.ini DiagnosticMessagesTemplate and rejects the same-named service as a conflict
 #     (AMQ7059E "details ... conflict"), regardless of the details — proven live by
-#     removing the template. Plain crtmqm (pcmk/nativeha arms) does not do this
+#     removing the template. Plain crtmqm (nativeha arms, SVCQM) does not do this
 #     validation, so the template is fine there. This supersedes the #556 distinct-Name
 #     theory, which the churned triage could not actually confirm. (RDQM per-QM logging
 #     is restored separately — see the follow-up task.)
