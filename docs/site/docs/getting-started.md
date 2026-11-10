@@ -166,7 +166,7 @@ The deep dive below explains what each `mqlab` verb is doing under the hood.
     [Vergil](https://github.com/vergil-project) VM — the author's personal
     solo-practitioner dev tooling — rather than on the host directly. That is a
     development convenience, **not** part of the consumer path: strip Vergil away
-    and what remains is exactly the tree you unpacked above. If you're a Vergil
+    and what remains is exactly the tree you cloned above. If you're a Vergil
     user, [Develop the lab](develop.md) covers the `vrg-vm` workflow.
 
 ## How `mqlab` drives the lab
