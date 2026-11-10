@@ -2,21 +2,19 @@
 
 mqweb runs on every QM node, and its role fails loudly without the stack's
 `mqweb_aes_passphrase` secret and MQWEB_STATE_DIR (#1500). `mqlab bootstrap` exported
-both; `mqlab qm create <stack>` and lab/scripts/dr-provision.sh did not, so ungating
-mqweb would have broken them. All three now take the env from one function,
-cli._stack_provision_env:
+both; `mqlab qm create <stack>` did not, so ungating mqweb would have broken it. Every
+path now takes the env from one function, cli._stack_provision_env:
 
 - `qm create` passes it on the playbook's own subprocess (Command.env);
-- `vm provision-env <stack>` prints it as shell exports, which dr-provision.sh evals.
+- `vm provision-env <stack>` prints it as shell exports, for an operator script to eval.
 """
 
 from __future__ import annotations
 
 import io
 import os
-import shutil
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import typer
@@ -28,8 +26,8 @@ from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
 
-REPO = Path(__file__).resolve().parents[1]
-DR_PROVISION = REPO / "lab" / "scripts" / "dr-provision.sh"
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class _NoPause:
@@ -164,7 +162,7 @@ def test_vm_provision_env_prints_shell_exports_that_round_trip(monkeypatch, lab)
         "export MQWEB_AES_PASSPHRASE",
         "export MQWEB_STATE_DIR",
     ]
-    # Evaluated by bash exactly as dr-provision.sh does, each value survives verbatim.
+    # Evaluated by bash with `eval`, each value survives verbatim.
     probe = 'eval "$1"; printf "%s\\n" "$CLUSTER_PASSWORD" "$MQWEB_STATE_DIR"'
     out = subprocess.run(  # noqa: S603
         ["bash", "-c", probe, "probe", result.stdout],  # noqa: S607
@@ -188,74 +186,3 @@ def test_vm_provision_env_prints_nothing_when_a_secret_fails(monkeypatch, lab):
     result = CliRunner().invoke(cli.app, ["vm", "provision-env", "nativeha-ubuntu"])
     assert result.exit_code == 2
     assert "export" not in result.stdout
-
-
-# --- lab/scripts/dr-provision.sh ----------------------------------------------------
-
-_STUB_MQLAB = """#!/usr/bin/env bash
-set -eu
-echo "$PWD $*" >> "$STUB_LOG"
-if [ "$*" = "vm provision-env pcmk-ubuntu" ]; then
-  [ "${STUB_FAIL:-}" = 1 ] && { echo "lab-secret.sh failed" >&2; exit 2; }
-  echo "export PCMK_HACLUSTER_PASSWORD='ha pw'"
-  echo "export MQWEB_AES_PASSPHRASE=aes"
-  echo "export MQWEB_STATE_DIR=/state/mqweb"
-fi
-"""
-
-_STUB_PLAYBOOK = """#!/usr/bin/env bash
-{
-  echo "ARGS=$*"
-  echo "PCMK=${PCMK_HACLUSTER_PASSWORD:-}"
-  echo "AES=${MQWEB_AES_PASSPHRASE:-}"
-  echo "STATE=${MQWEB_STATE_DIR:-}"
-} > "$STUB_PLAY"
-"""
-
-
-def _dr_sandbox(tmp_path: Path, *, fail: bool) -> tuple[subprocess.CompletedProcess[str], Path]:
-    root = tmp_path / "repo"
-    (root / "lab" / "scripts").mkdir(parents=True)
-    (root / "ansible").mkdir()
-    shutil.copy2(DR_PROVISION, root / "lab" / "scripts" / "dr-provision.sh")
-    stub_bin = tmp_path / "bin"
-    stub_bin.mkdir()
-    for name, body in (("mqlab", _STUB_MQLAB), ("ansible-playbook", _STUB_PLAYBOOK)):
-        (stub_bin / name).write_text(body)
-        (stub_bin / name).chmod(0o755)
-    play = tmp_path / "play.out"
-    env = {
-        "PATH": f"{stub_bin}:{os.environ['PATH']}",
-        "STUB_LOG": str(tmp_path / "mqlab.log"),
-        "STUB_PLAY": str(play),
-        **({"STUB_FAIL": "1"} if fail else {}),
-    }
-    result = subprocess.run(  # noqa: S603
-        ["bash", str(root / "lab" / "scripts" / "dr-provision.sh"), "-e", "qm_app=PCMKAPP"],  # noqa: S607
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
-    return result, play
-
-
-def test_dr_provision_exports_the_provision_env_to_the_playbook(tmp_path):
-    result, play = _dr_sandbox(tmp_path, fail=False)
-    assert result.returncode == 0, result.stderr
-    assert play.read_text().splitlines() == [
-        "ARGS=site-pcmk.yml -e qm_app=PCMKAPP",
-        "PCMK=ha pw",
-        "AES=aes",
-        "STATE=/state/mqweb",
-    ]
-    calls = (tmp_path / "mqlab.log").read_text().splitlines()
-    repo = tmp_path / "repo"
-    assert calls == [f"{repo} vm provision-env pcmk-ubuntu", f"{repo} vm inventory"]
-
-
-def test_dr_provision_stops_when_the_provision_env_fails(tmp_path):
-    result, play = _dr_sandbox(tmp_path, fail=True)
-    assert result.returncode != 0
-    assert "lab-secret.sh failed" in result.stderr
-    assert not play.exists()  # the playbook never ran

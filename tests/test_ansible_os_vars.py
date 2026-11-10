@@ -37,8 +37,7 @@ DISTRIBUTION = {"rhel": "RedHat", "ubuntu": "Ubuntu"}
 # Ansible role -> the catalog stacks whose OSes run its os-vars include. Only the code
 # path that CONSUMES the per-version vars counts: mq-nativeha includes os-vars from
 # install-RedHat.yml alone, so it maps to the RHEL stack, never nativeha-ubuntu.
-# mq-nativeha-spike runs on the reused rdqm-* RHEL slots. drbd-san (#1278) routes its
-# kernel-modules package name through the include.
+# mq-nativeha-spike runs on the reused rdqm-* RHEL slots.
 # INFRA / INFRA_MQ are not stacks: they stand for the catalog's `infra` / `infra_mq` OS,
 # which the shared boxes boot (#1282).
 INFRA = "infra"
@@ -47,9 +46,6 @@ ROLE_STACKS = {
     "rdqm-install": ("rdqm-rhel",),
     "mq-nativeha": ("nativeha-rhel-crr",),
     "mq-nativeha-spike": ("rdqm-rhel",),
-    # drbd-san ran on a box on the infra OS; no catalogued stack uses it any more, but
-    # while the role ships it still includes os-vars, so its infra-OS file stays checked.
-    "drbd-san": (INFRA,),
     # Every baked Ubuntu box runs cloud-init-trim (#1250): the Ubuntu stack's boxes and
     # the shared boxes on either shared OS (#1282).
     "cloud-init-trim": ("nativeha-ubuntu", INFRA, INFRA_MQ),

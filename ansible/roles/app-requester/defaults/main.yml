@@ -5,7 +5,7 @@
 # histogram). The importing arm supplies:
 #   app_conn — the DATA-PLANE CONNAME the app host uses to reach its app QM (the VIP
 #              on the VIP arms; the Native HA site-A instances' data IPs where none).
-#   app_tls  — APP.SVRCONN is mutual-TLS on pcmk (#250); plaintext on nativeha/rdqm.
+#   app_tls  — whether APP.SVRCONN is mutual-TLS (#250); the importing arm sets it.
 app_requester_qm: "{{ our_qm }}"
 app_requester_conn: "{{ app_conn }}"
 app_requester_tls: "{{ app_tls | default(true) }}"

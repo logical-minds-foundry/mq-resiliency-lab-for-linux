@@ -5,7 +5,7 @@
 # both arms run the identical SVC/app code. The importer supplies `our_qm` (this
 # side's QM name) and `our_conn` (its CONNAMEs) for the their-side channels.
 
-# Cold-boot guard for the SVC + app hosts (mirrors site-pcmk.yml's guard; #151
+# Cold-boot guard for the SVC + app hosts (#151
 # lesson): a guest not yet SSH-ready when its play fires must not drop out.
 - name: wait for the SVC + app hosts to be SSH-ready (cold-boot guard)
   hosts: svc:app

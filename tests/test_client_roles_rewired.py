@@ -79,7 +79,6 @@ ENV = {
     "mq-inter-qm": ("mq-svc-responder.env.j2", "mq-svc-responder@.service"),
 }
 AUTHZ_PLAYS = {
-    "site-pcmk-authz-validate.yml": 10,
     "site-nativeha-ubuntu-authz-validate.yml": 4,
     "site-rdqm-authz-validate.yml": 4,
 }
@@ -346,8 +345,6 @@ SHARED_IMPORTERS = {
     "site-nativeha.yml": True,
     "site-nativeha-ubuntu.yml": True,
     "site-rdqm.yml": False,
-    "site-pcmk.yml": False,
-    "site-pdrbd.yml": False,
 }
 
 

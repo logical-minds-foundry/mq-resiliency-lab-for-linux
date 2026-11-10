@@ -1,7 +1,7 @@
 ---
 # Place one lab-pki entity's PKCS#12 keystore on the host that uses it, and
 # source its (persisted-once) password from the controller. Caller sets:
-#   pki_entity     — the entity CN (e.g. PCMKAPP); names the controller-side
+#   pki_entity     — the entity CN (e.g. RDQMAPP); names the controller-side
 #                    source cert + the password secret, AND the cert label inside
 #                    the keystore (callers set CERTLABL/CertificateLabel = entity).
 #   pki_dest_dir   — where on the target host the keystore lands. The deployed file

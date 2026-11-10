@@ -8,7 +8,7 @@
 # commons, which carries the infra nodes).
 
 # Cold-boot guard: a freshly-booted infra guest may not be SSH-ready when this
-# play fires (mirrors site-pcmk.yml / site-distributed-shared.yml, #151).
+# play fires (mirrors site-distributed-shared.yml, #151).
 - name: wait for the infra nodes to be SSH-ready (cold-boot guard)
   hosts: infra
   gather_facts: false
@@ -67,8 +67,8 @@
     # Since #1225 every baked Ubuntu box ships these units already MASKED (role
     # apt-autoupdate-off, run at bake), so nothing fired on boot and there is nothing to
     # mask or wait for. Detect that with one read-only query and skip both #1173 steps
-    # below; they stay only as a defensive path for a box baked before #1225 (or the
-    # unbaked SAN hosts). This play only ever MASKS — it never unmasks/re-enables anything.
+    # below; they stay only as a defensive path for a box baked before #1225. This play
+    # only ever MASKS — it never unmasks/re-enables anything.
     # noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY.
     - name: check whether the box was baked with apt auto-updates already masked (#1225)  # noqa: command-instead-of-module
       ansible.builtin.command:

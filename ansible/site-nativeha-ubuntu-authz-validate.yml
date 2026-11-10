@@ -1,11 +1,11 @@
 ---
 # Stage 2 authorization validation for the nativeha-ubuntu arm (#74 / #619). The
-# Native HA peer of site-pcmk-authz-validate.yml: induced-denial + positive +
+# Native HA peer of site-rdqm-authz-validate.yml: induced-denial + positive +
 # post-failover, run against the live, authorized nativeha-ubuntu arm. Harness CODE
 # that IS the live-run evidence source for #619 (this repo has no behavioural lint —
 # the running, authorized arm + a one-pass bring-up is the epic gate).
 #
-# Adapted from the pcmk harness to the Native HA substrate:
+# Adapted to the Native HA substrate:
 #   * NO VIP -> app_conn is the instance CONNAME reconnect list (site A + site B), so
 #     one connect reaches the live QM whichever instance/site currently holds it.
 #   * the active instance is discovered with `dspmq -m <qm> -o nativeha -x` (not pcs).
@@ -13,7 +13,7 @@
 #     the existing nativeha mechanism site-nativeha-ubuntu-switchover.yml (run between
 #     the `--tags core` and `--tags postfail` passes — see the RUN block at the bottom).
 #
-# Induced checks (mirror pcmk N1/N3 + positive + post-failover):
+# Induced checks (N1/N3 + positive + post-failover, as in the rdqm harness):
 #   N1  mqmon (OU=ops via MON.SVRCONN) MQPUT APP.REPLY   -> DENIED 2035 (monitoring is
 #       read-only: dsp/inq/sub, no put/get).
 #   N3  mqapp (OU=apps via APP.SVRCONN) MQGET SVC.REQUEST -> DENIED 2035 (least privilege
@@ -43,7 +43,7 @@
 #   (1) mon_keyrepo -- the OU=ops identity (mqmon) needs an OU=ops client keystore. The
 #       only one in the lab is `mq_prometheus`, placed by roles/mq-exporter on mon-probe
 #       (/var/mqm/ssl/mq_prometheus/, owner mqm), NOT on the app host. The first play
-#       fetches it from mon-probe and stages it on the app host (as the pcmk harness #792).
+#       fetches it from mon-probe and stages it on the app host (#792).
 #   (2) The positive uses `mq-app-requester --count 1` (bounded one-shot: exit 0 on a
 #       reply, non-zero on failure). Its TLS args are the app-requester role defaults.
 #   (3) Client path: the probes and the requester are entry points of the baked

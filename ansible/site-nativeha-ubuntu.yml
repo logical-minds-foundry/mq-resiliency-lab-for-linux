@@ -51,7 +51,7 @@
 # must exist on EVERY nativeha-ubuntu node BEFORE any setmqaut grant, and on both the
 # HA site (nha_ubuntu_a) AND the DR site (nha_ubuntu_b) so authorization survives an
 # instance failover AND a CRR/GroupRole cutover — the substrate-consistency invariant
-# (spec §6). Arm-agnostic: same accounts role + authz.yml as the pcmk arm; only the
+# (spec §6). Arm-agnostic: same accounts role + authz.yml as the rdqm arm; only the
 # node lists change. Native HA replicates the QM's authority records via raft, but the
 # OS principals the records resolve against are node-local, so every node needs them.
 - name: authz service accounts on every nativeha-ubuntu node (HA + DR)
@@ -115,7 +115,7 @@
     # Stage 2 authorization (#74/#619): applied AFTER the base + inter-QM MQSC above so
     # the deny-all back-stop + SSLPEERMAP maps reference channels that already exist.
     # Reuses the ARM-AGNOSTIC authz.mqsc.j2 (CHLAUTH ENABLE + deny-all + SSLPEERMAP) and
-    # group_vars/all/authz.yml (accounts/maps/grants) verbatim from the pcmk arm — only
+    # group_vars/all/authz.yml (accounts/maps/grants) shared with the other arms — only
     # chl_to_app (=SVCQM.NHAUAPP, this arm's inter-QM RCVR, the qm_svc.qm_app channel of
     # the base MQSC) and the node lists differ. Runs ONCE on the active instance; Native
     # HA raft-replicates the QM object catalog — CHLAUTH rules AND the OAM authority
@@ -125,7 +125,7 @@
     #
     # The whole posture is ONE leadership-following unit (#891): the authz MQSC, then the
     # setmqaut grants (#74: the minimal least-privilege OAM surface, one invocation per
-    # grant; -t qmgr grants omit -n; mirrors the pcmk role's grant loop, driven by the same
+    # grant; -t qmgr grants omit -n; the same grant loop as site-rdqm.yml, driven by the same
     # authz_grants), then REFRESH SECURITY. A leadership move anywhere in it re-applies the
     # whole unit on the new Active — every step is idempotent. The MQSC is rendered on the
     # controller and fed to runmqsc on stdin, so no file is left pinned to one instance.
@@ -202,7 +202,7 @@
     # of the three holds the QM) — NOT another arm's range.
     our_conn: "nha-ubuntu-a1-ext.client.com(1414),nha-ubuntu-a2-ext.client.com(1414),nha-ubuntu-a3-ext.client.com(1414)"
     # The app host reaches the app QM on the data plane; Native HA has no VIP, so it
-    # lists the site-A instances. APP.SVRCONN is mutual-TLS here (matches pcmk), so
+    # lists the site-A instances. APP.SVRCONN is mutual-TLS here (as on rdqm), so
     # the app requester connects over TLS -> app_tls true. (#411)
     app_conn: "nha-ubuntu-a1-data-a.client.com(1414),nha-ubuntu-a2-data-a.client.com(1414),nha-ubuntu-a3-data-a.client.com(1414)"
     app_tls: true

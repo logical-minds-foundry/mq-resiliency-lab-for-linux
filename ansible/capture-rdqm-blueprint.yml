@@ -1,7 +1,7 @@
 ---
 # Read-only capture of what RDQM GENERATES on a live HA/DR group (epic .github#310 T1, #1422).
-# The capture is the blueprint the pacemaker-drbd arm is built to. It changes NOTHING on the
-# nodes and never copies secret material off a node (#1603): keystores and the corosync
+# The capture is a reference record of RDQM's generated configuration. It changes NOTHING on
+# the nodes and never copies secret material off a node (#1603): keystores and the corosync
 # authkey are never read; a key file in /etc/drbd.d (by name, or by carrying a PRIVATE KEY
 # block) is recorded by path only, never by content; any PRIVATE KEY block left in the DRBD
 # items is replaced with a marker, and DRBD shared-secret values are redacted, all at capture

@@ -4,7 +4,7 @@
 # frontend lock (/var/lib/dpkg/lock-frontend). A provisioning apt task that fires
 # inside that window fails fast — "Unable to acquire the dpkg frontend lock ... is
 # another process using it? (rc 100)" — which flakes a one-shot cold rebuild
-# (surfaced on pcmk-b1/b2 in the pcmk-cluster install). It is transient: a retry
+# (surfaced on Ubuntu cluster nodes during a package install). It is transient: a retry
 # clears once the background job finishes.
 #
 # The robust fix is to make every provisioning apt call WAIT for the lock instead

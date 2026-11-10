@@ -205,7 +205,7 @@ def test_scan_fails_loudly_outside_a_git_repo(tmp_path):
 
 
 def test_vars_exemption_is_per_version_files_only():
-    assert _is_exempt(Path("ansible/roles/drbd-san/vars/Ubuntu-24.yml"))
+    assert _is_exempt(Path("ansible/roles/cloud-init-trim/vars/Ubuntu-24.yml"))
     assert not _is_exempt(Path("ansible/vars/pki-entities.yml"))  # not <Distro>-<major>
     assert not _is_exempt(Path("ansible/roles/x/defaults/RedHat-9.yml"))  # not vars/
     assert not _is_exempt(Path("lab/vars/RedHat-9.yml"))  # not under ansible/

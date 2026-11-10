@@ -6,8 +6,8 @@ metrics there, and a silent regression to a non-group-writable mode (e.g. 0755)
 breaks that with EACCES. The systemd-tmpfiles rule is the single declarative owner
 of the mode; this test fails loudly if it ever drifts.
 
-#1378: the per-run collector roles (net-reach, cluster-state, nativeha-state,
-rdqm-state) each carried a `file: mode=0755` task on the drop zone, and net-reach runs
+#1378: the per-run collector roles (net-reach, nativeha-state, rdqm-state)
+each carried a `file: mode=0755` task on the drop zone, and net-reach runs
 AFTER node-exporter in observability.yml, so it reset the dir to 0755 mid-run. Only
 the node-exporter role (and the app-requester role, which must create it group-writable
 when it runs first) may manage the dir, and only as 02775. node-exporter reads every
@@ -31,9 +31,7 @@ _TMPFILES = _ROLES / "node-exporter/files/node-exporter-textfile.conf"
 _DROPZONE = "/var/lib/node_exporter/textfile"
 # The only roles allowed to manage the drop zone dir (each only as 02775).
 _DIR_MANAGERS = {"node-exporter", "app-requester"}
-_COLLECTOR_ROLES = ("net-reach", "cluster-state", "nativeha-state", "rdqm-state")
-# observability.yml no longer lists cluster-state (#1718); the role itself still exists.
-_OBSERVABILITY_COLLECTORS = ("net-reach", "nativeha-state", "rdqm-state")
+_COLLECTOR_ROLES = ("net-reach", "nativeha-state", "rdqm-state")
 
 
 def _rule() -> list[str]:
@@ -113,7 +111,7 @@ def test_collector_role_asserts_the_dropzone_instead_of_managing_it(role: str):
 def test_node_exporter_runs_before_the_collector_roles_in_observability():
     play = yaml.safe_load((_ANSIBLE / "observability.yml").read_text(encoding="utf-8"))[0]
     names = [r if isinstance(r, str) else r["role"] for r in play["roles"]]
-    for role in _OBSERVABILITY_COLLECTORS:
+    for role in _COLLECTOR_ROLES:
         assert names.index("node-exporter") < names.index(role), role
 
 

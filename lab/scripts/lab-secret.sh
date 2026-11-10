@@ -4,12 +4,11 @@
 # forever after.
 #
 # WHY THIS EXISTS: the lab is a disposable virtual illusion — its internal
-# secrets (e.g. the Pacemaker `hacluster` password, used only for pcs auth
-# between nodes) carry no security weight. The original design injected that
-# password via an ephemeral env var (PCMK_HACLUSTER_PASSWORD); when the session
-# that set it ended, the value was *lost*, leaving a running cluster whose
-# password no one knew and a re-provision with nothing to supply. The fix is to
-# treat such secrets like the fence key: auto-generate once, persist in the
+# secrets (e.g. a cluster password used only between nodes) carry no security
+# weight. The original design injected such a password via an ephemeral env var;
+# when the session that set it ended, the value was *lost*, leaving a running
+# cluster whose password no one knew and a re-provision with nothing to supply.
+# The fix is to auto-generate such secrets once, persist in the
 # gitignored, host-mounted build/ tree (survives VM rebuilds), and reuse. A
 # true ground-zero wipe of build/ simply regenerates them — full reproducibility
 # with no human in the loop.

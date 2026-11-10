@@ -1,9 +1,9 @@
 """Guard the collector roles' rewire onto the baked component (epic .github#294 T7).
 
-The collectors (lab-cluster-state, lab-nativeha-state + lab-loglifecycle-state,
-lab-rdqm-state) are the mq-resiliency-observability component, baked into each box that
-lab/versions.yaml lists it for (runtime-install, then component-install). The per-run roles
-cluster-state / nativeha-state / rdqm-state only: assert the component is baked, retire the
+The collectors (lab-nativeha-state + lab-loglifecycle-state, lab-rdqm-state) are the
+mq-resiliency-observability component, baked into each box that lab/versions.yaml lists it
+for (runtime-install, then component-install). The per-run roles nativeha-state /
+rdqm-state only: assert the component is baked, retire the
 pre-#294 payloads AND their /etc/systemd/system unit copies (systemd prefers /etc over the
 component's /usr/lib units, so a surviving copy would keep running the old /usr/bin/python3
 ExecStart — Review Focus 1), render the deployer-owned env file, daemon-reload and enable
@@ -32,13 +32,11 @@ ENV_DIR = f"/etc/opt/logical-minds-foundry/{COMPONENT}"
 
 # role -> the component unit (service + timer stem) its per-run half drives.
 UNIT = {
-    "cluster-state": "lab-cluster-state",
     "nativeha-state": "lab-nativeha-state",
     "rdqm-state": "lab-rdqm-state",
 }
 # role -> the pre-#294 payloads it deployed outside the component layout.
 OLD_PAYLOADS = {
-    "cluster-state": {"/usr/local/bin/lab-cluster-state"},
     "nativeha-state": {
         "/usr/local/bin/lab-nativeha-state",
         "/usr/local/bin/nativehastate.py",
@@ -190,7 +188,6 @@ def test_env_templates_match_unit_variables(role: str) -> None:
 @pytest.mark.parametrize(
     ("role", "value"),
     [
-        ("cluster-state", "ROLE={{ cluster_state_role }}"),
         ("nativeha-state", "QM={{ nativeha_qm | default('NHARCAPP') }}"),
         ("rdqm-state", "QM={{ rdqm_qm | default('RDQMAPP') }}"),
     ],

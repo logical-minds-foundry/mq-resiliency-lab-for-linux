@@ -14,14 +14,8 @@ import yaml
 
 from mqlab import mqexporter
 
-_ROLE_DEFAULTS = (
-    Path(__file__).resolve().parents[1]
-    / "ansible"
-    / "roles"
-    / "mq-exporter"
-    / "defaults"
-    / "main.yml"
-)
+_ROLE = Path(__file__).resolve().parents[1] / "ansible" / "roles" / "mq-exporter"
+_ROLE_DEFAULTS = _ROLE / "defaults" / "main.yml"
 # Synthetic MQ levels: the cache key is whatever the caller passes (box.py passes the
 # lab/mq-version pin), so the tests need no real version literal.
 _VER = "1.2.3.4"
@@ -96,3 +90,14 @@ def test_build_ref_matches_role_default():
     # MQ_EXPORTER_REF. They must be the same pin so a bump moves together.
     defaults = yaml.safe_load(_ROLE_DEFAULTS.read_text())
     assert defaults["mq_exporter_ref"] == mqexporter.MQ_EXPORTER_REF
+
+
+def test_instance_first_asserts_the_qm_conn_and_port_are_set():
+    # The role has no default for these three (each names one stack's QM), so the
+    # per-instance entry point must fail loud, naming the missing one, before any work.
+    tasks = yaml.safe_load((_ROLE / "tasks" / "instance.yml").read_text())
+    first = tasks[0]["ansible.builtin.assert"]
+    required = ("mq_exporter_qm", "mq_exporter_conn", "mq_exporter_port")
+    assert first["that"] == [f"{var} is defined" for var in required]
+    for var in required:
+        assert f"({var} is defined) | ternary('', '{var}')" in first["fail_msg"]

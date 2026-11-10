@@ -275,7 +275,7 @@ def test_caller_scan_finds_the_known_callers():
     # Guards the scan itself: a regex that silently stopped matching would make the
     # coverage test below vacuous.
     scan = _scan_callers()
-    # No in-repo shell caller remains (dr-provision.sh sources its stack's secrets
+    # No in-repo shell caller remains (operator scripts source a stack's secrets
     # through `mqlab vm provision-env` since #1502), so pin the shell form directly.
     shell_call = 'export X="$("$HERE/lab-secret.sh" mqweb_aes_passphrase)"'
     assert [m.group(1) for r in _INVOCATION_RES if (m := r.search(shell_call))] == [

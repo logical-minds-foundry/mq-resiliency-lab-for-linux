@@ -1,5 +1,5 @@
 * TLS parity for the RDQM app queue manager {{ qm_name }} (#410, #426). Mirrors the
-* pcmk mq-pcmk-qmgr MQSC posture: an app-org keystore plus mutual TLS on every
+* Native HA MQSC posture: an app-org keystore plus mutual TLS on every
 * app-facing channel. The cipher and peer DNs come from the shared tls_* vars
 * (group_vars/all/tls.yml -- the #212 seam), so this arm is a keystore-wiring delta,
 * not a per-arm channel rewrite.
@@ -9,7 +9,7 @@
 * MQI clients, need no sibling .sth stash).
 ALTER QMGR SSLKEYR('{{ rdqm_datapath }}/ssl/key') KEYRPWD('{{ pki_keyrpwd.stdout }}') CERTLABL('{{ qm_name }}')
 * Real-time monitoring on, so the per-stack mq_prometheus exporter (#423) reports
-* channel and queue status -- matching the pcmk/nativeha QMGR posture.
+* channel and queue status -- matching the nativeha QMGR posture.
 ALTER QMGR MONQ(HIGH) MONCHL(HIGH) MONACLS(HIGH) STATMQI(ON) STATQ(ON) STATCHL(HIGH) MAXHANDS(512)
 * App client -> app QM: mutual TLS, pin the app-org client cert (O=app-org).
 ALTER CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}')

@@ -124,10 +124,9 @@ def test_every_inter_qm_sdr_and_rcvr_sets_the_shared_hbint() -> None:
         "site-nativeha.yml",
         "site-nativeha-ubuntu.yml",
         "roles/mq-inter-qm/templates/their-side.mqsc.j2",
-        "templates/mq/inter-qm.mqsc.j2",
         "roles/rdqm-app-tls/templates/app-tls.mqsc.j2",
     }
-    assert len(lines) == 10  # an SDR and a RCVR at each of the five sites
+    assert len(lines) == 8  # an SDR and a RCVR at each of the four sites
     hbint = "HBINT({{ inter_qm_hbint }})"
     missing = [f"{path}: {line.strip()[:80]}" for path, line in lines if hbint not in line]
     assert missing == []

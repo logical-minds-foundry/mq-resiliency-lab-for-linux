@@ -18,7 +18,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANSIBLE = REPO_ROOT / "ansible"
-UBUNTU_BAKES = ("bake-mq-ubuntu.yml", "bake-nativeha-ubuntu.yml", "bake-pcmk-ubuntu.yml")
+UBUNTU_BAKES = ("bake-mq-ubuntu.yml", "bake-nativeha-ubuntu.yml")
 
 
 def _iter_tasks(node: Any) -> Any:

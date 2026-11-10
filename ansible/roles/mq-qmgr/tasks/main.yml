@@ -104,7 +104,7 @@
   failed_when: lsr.rc not in [0, 10]
 
 # mqoperator (MQWebUser) grants (epic .github#341 spec §2.2, IBM S15; #1501): the shared
-# arm-agnostic SET AUTHREC set every HA arm applies, rendered from the pcmk role's template
+# arm-agnostic SET AUTHREC set every HA arm applies, rendered from templates/mq/mqoperator.mqsc.j2
 # and fed to runmqsc on stdin. The mqoperator OS account comes from mq-authz-accounts
 # (site-distributed-shared.yml). rc 0 only: every line is a SET AUTHREC, so rc 10 is a
 # refused grant, not a re-provision no-op, and must fail loud.
