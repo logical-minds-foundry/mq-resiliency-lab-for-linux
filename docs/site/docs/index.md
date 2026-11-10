@@ -8,7 +8,7 @@ Clone the repository, run `./scripts/setup`, and bring up a full HA/DR stack wit
 a single command:
 
 ```bash
-uv run mqlab bootstrap pcmk-ubuntu
+uv run mqlab bootstrap nativeha-ubuntu
 ```
 
 That one command defines the lab networks, boots the guest fleet, provisions the
@@ -25,14 +25,14 @@ everything else.
 
 ## What you can do here
 
-- Form a 3-node HA group — **RDQM**, **Pacemaker/SAN**, or **Native HA** — with
-  automatic failover, and prove a live message path survives it.
+- Form a 3-node HA group — **RDQM** or **Native HA** — with automatic failover,
+  and prove a live message path survives it.
 - Drive an asynchronous **DR / CRR** cutover to a matching 3-node group at a
   second site (a full 3+3 stack).
-- Compare the three HA mechanisms — replicated-storage (RDQM), shared-SAN
-  (Pacemaker), and log-replicated (Native HA) — on the same network fabric.
-  **Native HA is the strategic choice** for new HA deployments. RDQM and
-  Pacemaker are counter-options the lab keeps for as long as IBM supports them
+- Compare the two HA mechanisms — replicated-storage (RDQM) and log-replicated
+  (Native HA, on RHEL and on Ubuntu) — on the same network fabric.
+  **Native HA is the strategic choice** for new HA deployments. RDQM is a
+  counter-option the lab keeps for as long as IBM supports it
   (see [Architecture](architecture/index.md)).
 
 ## What it actually is

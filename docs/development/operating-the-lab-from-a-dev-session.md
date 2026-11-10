@@ -71,6 +71,26 @@ mid-run with `ansible-playbook: command not found`.
   [Getting Started](../site/docs/getting-started.md) describes: it builds the
   venv and prints the next commands.
 
+### One-time host step: remove the SAN networks
+
+The lab no longer has the `pcmk-ubuntu` and `pcmk-drbd-ubuntu` stacks (epic
+[.github#399](https://github.com/logical-minds-foundry/.github/issues/399)), so
+nothing uses the `net-san-a` and `net-san-b` libvirt networks any more, and their
+`net-*.xml` definitions are gone from `lab/networks/`. A host that ran those stacks
+still has the two networks defined. Remove them once per host:
+
+```sh
+virsh -c qemu:///system list --all   # first: no lab_pcmk-*, lab_pdrbd-* or lab_san-* guest left
+lab/scripts/net-down.sh net-san-a net-san-b
+uv run mqlab box gc                  # deregisters the retired pcmk-*, pdrbd-* and san-* boxes
+```
+
+Given network names, `net-down.sh` runs `virsh net-destroy` and `net-undefine` on
+them whether or not their `net-*.xml` files still exist. Afterwards,
+`virsh -c qemu:///system net-list --all` lists no `net-san-*` network. A host that
+never ran those stacks has nothing to remove, and the step is harmless there. If a
+removed stack's guest is still listed, report it rather than removing it by hand.
+
 ---
 
 ## 2. The node map and SSH

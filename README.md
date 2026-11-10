@@ -59,7 +59,7 @@ Almost everything is fetched automatically — IBM **MQ Advanced for Developers*
 - **libvirt / QEMU / Vagrant** — the virtualization stack the guests run on.
 - **git** — to clone the lab.
 - **A RHEL subscription** — only for the RHEL-based arms (RDQM, Native HA on
-  RHEL). The canonical `pcmk-ubuntu` arm needs nothing extra. Both RHEL arms
+  RHEL). The canonical `nativeha-ubuntu` arm needs nothing extra. Both RHEL arms
   default to RHEL 10, which needs an x86-64-v3 CPU (`mqlab doctor` says
   whether yours is one); without it, build them on RHEL 9 instead.
 
@@ -88,8 +88,8 @@ first stack:
 ```bash
 ./scripts/setup                        # checks uv + Python 3.14, then runs `uv sync` to build the venv
 uv run mqlab doctor                    # pre-flight the host: arch, KVM, libvirt, required tools
-uv run mqlab bootstrap pcmk-ubuntu     # bring up a full HA/DR stack: net → vms → provision → observe
-uv run mqlab status pcmk-ubuntu        # phase completion (✓/✗) for this stack
+uv run mqlab bootstrap nativeha-ubuntu # bring up a full HA/DR stack: net → vms → provision → observe
+uv run mqlab status nativeha-ubuntu    # phase completion (✓/✗) for this stack
 ```
 
 `./scripts/setup` sets up the **environment**, not the lab: it verifies `uv` and
@@ -98,9 +98,9 @@ a uv-managed Python 3.14 are present (installing 3.14 via `uv` if missing), runs
 Run the CLI as `uv run mqlab …`: `uv run` puts the venv's `bin/` on `PATH`, so
 the companion tools `mqlab` calls by bare name resolve. (Activating the venv with
 `. .venv/bin/activate` works too, and then a bare `mqlab …` does.)
-`uv run mqlab bootstrap pcmk-ubuntu` sequences the whole bring-up — the canonical
-starting arm is **`pcmk-ubuntu`** (Pacemaker/SAN on Ubuntu, subscription-free and
-x86-native) — and leaves you with a **running queue manager**. See
+`uv run mqlab bootstrap nativeha-ubuntu` sequences the whole bring-up — the
+canonical starting arm is **`nativeha-ubuntu`** (Native HA on Ubuntu, the one
+stack that needs no RHEL subscription and no RDQM entitlement) — and leaves you with a **running queue manager**. See
 [Getting Started](docs/site/docs/getting-started.md) to send your first message
 and watch it survive a failover.
 

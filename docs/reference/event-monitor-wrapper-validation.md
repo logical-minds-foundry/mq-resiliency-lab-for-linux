@@ -44,7 +44,6 @@ travels with the QM). Resolve it per arm:
 |---|---|
 | Native HA (rhel/ubuntu) | `dspmq -m <QM> -o nativeha -x` on any node → the `INSTANCE(<node>) ROLE(Active)` line |
 | RDQM | `rdqmstatus -m <QM>` → the node reporting `Running` / primary |
-| Pacemaker | `pcs status` (or `crm_mon`) → the resource owner |
 | Standalone (e.g. `SVCQM`) | the single host |
 
 ## Step 2 — run the harness on the active node

@@ -10,13 +10,13 @@ Task 1 / #602).
 
 ## The bake/configure line
 
-The lab bakes **eight fat box images** — `mq-rdqm-rhel9`, `obs-ubuntu24`,
+The lab bakes **six fat box images** — `mq-rdqm-rhel9`, `obs-ubuntu24`,
 `infra-ubuntu24`, and `mq-client-ubuntu24` (#659) from the bootstrap-performance
 epic; `mq-nativeha-rhel9` (#667) from the follow-on native-HA-RHEL baking epic
-(`logical-minds-foundry/.github#88`); `mq-nativeha-ubuntu24` (#103 T6) and
-`pcmk-ubuntu24` (#103 T7) from the arch-native box-building epic
-(`logical-minds-foundry/.github#103`); and `san-ubuntu24` (#1278) from the OS version
-axis epic (`logical-minds-foundry/.github#280`). The log-search stack (OpenSearch + Dashboards
+(`logical-minds-foundry/.github#88`); and `mq-nativeha-ubuntu24` (#103 T6) from the
+arch-native box-building epic (`logical-minds-foundry/.github#103`). The boxes of the
+two retired Pacemaker stacks (`pcmk-*`, `pdrbd-*` and the `san-*` SAN targets) are no
+longer baked (epic `.github#399`). The log-search stack (OpenSearch + Dashboards
 + Data Prepper, `logical-minds-foundry/.github#149`) was originally its own
 `logsearch-ubuntu2404` box, but the observability-consolidation epic
 (`logical-minds-foundry/.github#267`) folded it into `obs-ubuntu24` (#1178) and
@@ -30,11 +30,11 @@ with KVM the fleet also bakes `mq-nativeha-rhel10` and `mq-rdqm-rhel10`: the sam
 `nativeha-rhel` and `mq-rdqm` bakes on the RHEL 10 base box `rhel/10-x86_64` (#1286;
 RDQM on RHEL 10 from MQ 10.0.1, #1440).
 Since #1282 the shared non-MQ boxes run the catalog's `infra:` OS, Ubuntu 26
-(`obs-ubuntu26`, `infra-ubuntu26`, `san-ubuntu26`). Since #1285 the support-gated
+(`obs-ubuntu26`, `infra-ubuntu26`). Since #1285 the support-gated
 `infra_mq:` OS is Ubuntu 26 too, by a recorded lab decision ahead of IBM, so the MQ
-commons bake `mq-client-ubuntu26`, and both Ubuntu stacks default to their Ubuntu 26
-variant (`mq-nativeha-ubuntu26`, `pcmk-ubuntu26`), with the 24 variants still
-selectable, all from the same playbooks; see
+commons bake `mq-client-ubuntu26`, and the Ubuntu stack defaults to its Ubuntu 26
+variant (`mq-nativeha-ubuntu26`), with the 24 variant still selectable, all from the
+same playbooks; see
 [`box-model.md`](box-model.md#shared-nodes-infra-and-infra_mq-the-ubuntu-26-support-gate).
 The sections below name the 24 boxes; a playbook bakes every major its role runs on,
 and the only per-major differences are the role `vars/Ubuntu-<major>.yml` files noted
@@ -77,11 +77,8 @@ while editing a per-run configure role leaves every fat box at REUSE.
 |----------|---------------------------|------------|------------------|
 | `infra` | `infra` / — | no | — |
 | `obs` | `obs` / — | no | — |
-| `san` | `san` / — | no | `mq-resiliency-observability` |
 | `mq-client` | `mq-ubuntu` / — | yes | `mq-resiliency-clients` |
 | `mq-nativeha` | `nativeha-ubuntu` / `nativeha-rhel` | yes | `mq-resiliency-observability` |
-| `pcmk` | `pcmk-ubuntu` / — | yes | `mq-resiliency-observability` |
-| `pdrbd` | `pdrbd-ubuntu` / — | yes | `mq-resiliency-observability` |
 | `mq-rdqm` | — / `mq-rdqm` | yes | `mq-resiliency-observability` |
 
 The last column is `roles.<role>.components` in `lab/versions.yaml` (epic
@@ -92,8 +89,10 @@ that bakes none is never rebaked by a runtime bump. See
 [`components/README.md`](../../components/README.md).
 
 The pre-rename names (`obs-ubuntu2404`, `infra-ubuntu2404`, `mq-ubuntu2404`,
-`mq-nativeha-ubuntu`, `pcmk-ubuntu`, base `rhel/9.6-x86_64`) are retired; see
-[`box-model.md`](box-model.md#the-one-time-rename-1274) for the migration.
+`mq-nativeha-ubuntu`, `pcmk-ubuntu`, base `rhel/9.6-x86_64`) are retired, and so are
+the boxes of the removed Pacemaker stacks (`pcmk-ubuntu24`/`26`, `pdrbd-ubuntu24`/`26`,
+`san-ubuntu24`/`26`); see [`box-model.md`](box-model.md#the-one-time-rename-1274) for
+the migration that reclaims them.
 
 - **Bake** = image-bakeable install: packages, downloaded/compiled binaries, users,
   directory scaffolding, and *static* config that is identical for every lab. Runs
@@ -106,8 +105,8 @@ The pre-rename names (`obs-ubuntu2404`, `infra-ubuntu2404`, `mq-ubuntu2404`,
 This document is the classification. The **bake playbooks**
 (`ansible/bake-mq-rdqm.yml`, `ansible/bake-obs.yml`, `ansible/bake-infra.yml`,
 `ansible/bake-mq-ubuntu.yml`, `ansible/bake-nativeha-rhel.yml`,
-`ansible/bake-nativeha-ubuntu.yml`, `ansible/bake-pcmk-ubuntu.yml`,
-`ansible/bake-pdrbd-ubuntu.yml`, `ansible/bake-san.yml`) and the single-host inventory (`ansible/inventory/bake-host.ini`) are the mechanism.
+`ansible/bake-nativeha-ubuntu.yml`) and the single-host inventory
+(`ansible/inventory/bake-host.ini`) are the mechanism.
 
 > **Scope of #602 (this task): additive only.** The bake playbooks are a new
 > foundation. They do **not** change any normal bootstrap behavior — the per-run
@@ -195,8 +194,8 @@ large artifacts in `/tmp` on any OS.
   then makes it `root:root 0755`. Creating it per use rather than once per bake matters:
   `systemd-tmpfiles` ages `/var/tmp` (30 days), so a box baked long ago can boot without
   it. `0755` lets apt's unprivileged `_apt` user read the local MQ `.deb`s, as it could
-  under `/tmp`. The staging tasks run with `become: true`, because the pcmk and spike
-  plays apply MQ roles without a play-level become.
+  under `/tmp`. The staging tasks run with `become: true`, because the spike plays
+  apply MQ roles without a play-level become.
 - **Users.** The MQ media (`mqadv.tar.gz` and `MQServer/`) in `mq-install`, `mq-client`,
   `mq-nativeha` (both adapters), `mq-nativeha-spike` and `rdqm-install`, including
   `modver`, the kmod `stat` and both `dnf` steps. Also the `prometheus`, `loki`/`logcli`,
@@ -249,9 +248,9 @@ pre-config state:
 ## Every Ubuntu box: per-login dynamic MOTD disabled at bake (#1229)
 
 Each Ubuntu bake playbook (`bake-obs.yml`, `bake-infra.yml`, `bake-mq-ubuntu.yml`,
-`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`, `bake-san.yml`) has its own play near the end
-that runs the `motd-off` role (only the #1250 boot-trim play comes after it). The RHEL bakes do not include it: the role is
-Ubuntu-specific and asserts a Debian-family host.
+`bake-nativeha-ubuntu.yml`) has its own play near the end that runs the `motd-off` role
+(only the #1250 boot-trim play comes after it). The RHEL bakes do not include it: the
+role is Ubuntu-specific and asserts a Debian-family host.
 
 | Role | In bake | Notes |
 |------|---------|-------|
@@ -259,15 +258,15 @@ Ubuntu-specific and asserts a Debian-family host.
 
 Rationale and evidence: [`box-model.md` §2](box-model.md#no-per-login-dynamic-motd-1229).
 The role is in each Ubuntu bake's manifest-hash closure, so introducing it (and
-any later edit to it) flips all six Ubuntu boxes to BUILD. The RHEL boxes are
-unaffected.
+any later edit to it) flips the boxes of all four Ubuntu roles to BUILD. The RHEL boxes
+are unaffected.
 
 ## Every Ubuntu box: cloud-init and snapd trimmed off the boot path (#1250)
 
 Each Ubuntu bake playbook (`bake-obs.yml`, `bake-infra.yml`, `bake-mq-ubuntu.yml`,
-`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`, `bake-san.yml`) has its own play near the end
-that runs `cloud-init-trim` and then `snapd-off`. Only the read-only #1265 guard play
-follows it, so the snapd guard sees every snap the bake installed. The RHEL bakes include neither: both roles are
+`bake-nativeha-ubuntu.yml`) has its own play near the end that runs `cloud-init-trim`
+and then `snapd-off`. Only the read-only #1265 guard play follows it, so the snapd guard
+sees every snap the bake installed. The RHEL bakes include neither: both roles are
 Ubuntu-specific and assert a Debian-family host.
 
 | Role | In bake | Notes |
@@ -277,8 +276,8 @@ Ubuntu-specific and assert a Debian-family host.
 
 Rationale and evidence: [`box-model.md` §2](box-model.md#cloud-init-and-snapd-trimmed-off-the-boot-path-1250).
 Both roles are in each Ubuntu bake's manifest-hash closure, so introducing them
-(and any later edit) flips all six Ubuntu boxes to BUILD. The RHEL boxes are
-unaffected.
+(and any later edit) flips the boxes of all four Ubuntu roles to BUILD. The RHEL boxes
+are unaffected.
 
 ## Every Ubuntu box: the bake guard (#1265)
 
@@ -442,69 +441,6 @@ arch is not pinned.
 | `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
 | `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`nativeha-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
 
-### `pcmk-ubuntu24` → `ansible/bake-pcmk-ubuntu.yml` (#103 T7, epic .github#103)
-
-The Pacemaker/SAN peer, for the six Pacemaker **cluster** nodes (`pcmk-a1..3`,
-`pcmk-b1..3`) repointed to this box so a bootstrap skips their per-run base-MQ
-install. It bakes the MQ product install the cluster nodes run via `mq-install`
-(the same role `_pcmk-cluster-ha.yml` drives on `pcmk_a`/`pcmk_b`). It does **not**
-touch the SAN targets (`san-a`/`san-b`) — they carry no IBM-MQ payload and boot
-their own `san-ubuntu26` box (below). Host-resolved: baked natively per host (arm64
-or x86), guest arch not pinned.
-
-The box is **MQ-bearing** (#1572). `mq-install`'s skip-if-baked guard keys on the
-presence of `cmqc.h`, not on its version, and the per-run `_pcmk-cluster-ha.yml`
-pass runs the same role. So a node cloned from a stale box keeps the old MQ and
-nothing upgrades it. The `lab/mq-version` pin is therefore part of this box's
-manifest hash, and a pin bump rebakes it (#1087).
-
-| Role | In bake | Notes |
-|------|---------|-------|
-| `acl` (apt pkg) | ✅ full | Unprivileged-become prereq for `site-pcmk.yml` — the pcmk-side #659 acl-stall kill. |
-| `mq-install` | ✅ full | The Ubuntu MQ product via the deb path (server + client + SDK + samples; unpack debs, licence, `setmqinst`, ulimits) — the way the Pacemaker cluster nodes install MQ in `_pcmk-cluster-ha.yml` (`roles: [mq-install]`). **No** RDQM/DRBD, **no** QM created; `crtmqm` / resource-group / cluster formation stay per-run (`mq-pcmk-qmgr`). Already carries the stat-of-`cmqc.h` skip-if-baked guard (#648/#659) and the arch-derived tarball, so the ~700 MB tar copy/unpack + install runs once — here. |
-| `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a Pacemaker box. |
-| `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
-| `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
-| `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`cluster-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
-
-### `pdrbd-ubuntu24` → `ansible/bake-pdrbd-ubuntu.yml` (#1423, epic .github#310)
-
-The shared-nothing peer of the `pcmk` box, for the six cluster nodes of the
-`pcmk-drbd-ubuntu` stack: the open-source rebuild of RDQM's architecture from
-Corosync/Pacemaker and LINBIT DRBD 9. It bakes the `pcmk` box's set plus the
-**install half** of `drbd9`. The `drbd9` install half adds
-`ppa:linbit/linbit-drbd9-stack` and builds `drbd-dkms` against the image's own kernel.
-It then loads the module and asserts `/sys/module/drbd/version` is `9.x` before the
-image is captured, so a node never compiles a kernel module at boot. The in-kernel
-DRBD is 8.4.11 (two nodes, no quorum), so it is never used. The box is **MQ-bearing**,
-like `pcmk`: `mq-install`'s skip-if-baked guard keys on presence only, so an MQ
-pin bump has to rebake it (#1087). Host-resolved.
-
-| Role | In bake | Notes |
-|------|---------|-------|
-| `acl`, `mq-install`, `entropy`, `node-exporter`, `alloy`, `runtime-install`, `component-install` | as `pcmk-ubuntu24` | Same set and same split as the `pcmk` box above. |
-| `drbd9` | ✅ install half | LINBIT PPA, `linux-headers-<running kernel>` + `dkms` + `lvm2`, then `drbd-dkms` + `drbd-utils`, plus Ubuntu's `ktls-utils` (`tlshd`) for DRBD's replication TLS (#1609), baked **inert** (disabled and stopped; the per-run `pdrbd-replication-tls` role configures and starts it). Proven at bake with `modprobe drbd` and a `9.x` assert, then unloaded. The **configure half** (`main.yml`) stays per-run. It checks `modinfo -k $(uname -r)` against the booted kernel **before** `modprobe`. If the node booted a kernel other than the baked one, it fails loud and names the fix: rebuild the `pdrbd` box. It then asserts the *loaded* module is `9.x`, and creates the `drbdpool` VG on the instance's extra disk (`/dev/vdb`). |
-
-### `san-ubuntu26` → `ansible/bake-san.yml` (#1278, epic .github#280 spec §4.7.1)
-
-The two SAN targets (`san-a`/`san-b`). It bakes only the **install halves** of the
-SAN roles, on the target OS itself, against the box's own kernel. It replaced the
-controller-side SAN deb cache (`.github#108`), which ran `apt-get download` on the
-controller: that fetched the controller's release (noble), so 26.04 SANs would have
-installed noble packages, and its kernel-keyed `linux-modules-extra` entry kept
-missing because the controller's kernel differs from the guest's. It configures no
-DRBD resource and no iSCSI target; both stay per-run. Host-resolved.
-
-| Role | In bake | Notes |
-|------|---------|-------|
-| `drbd-san` (`tasks_from: install`) | ✅ install half | `drbd-utils` + the kernel-modules package carrying the in-tree DRBD module. The package name is per OS version (`roles/drbd-san/vars/Ubuntu-24.yml`: `linux-modules-extra-<kver>`; `Ubuntu-26.yml`: the base `linux-modules-<kver>`, because 26.04 has no `linux-modules-extra` and ships `drbd.ko` and the LIO modules there, #1282), loaded through the fail-loud `ansible/tasks/os-vars.yml`. The resource file, `create-md`, `drbdadm up` and the attach check stay per-run in `main.yml`, which reruns the install half behind a `package_facts` skip-if-baked guard. |
-| `iscsi-target` (`tasks_from: install`) | ✅ install half | `targetcli-fb`. The backstore, IQN, LUN, ACLs and portal stay per-run in `main.yml`, which reruns the install half behind the same `package_facts` guard. The per-run portal step drops the auto-created wildcard portal, which is `0.0.0.0:3260` on targetcli-fb 2.x (24.04) and `[::0]:3260` from 3.0.1 (26.04, #1282). |
-| modules check | ✅ | `modinfo drbd` and `modinfo target_core_mod` must resolve for the baked kernel, so a missing module fails the bake rather than a later provision. |
-| `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
-| `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
-| `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
-| `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`cluster-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
-
 > The log-search stack (`opensearch`, `opensearch-dashboards`, `data-prepper`)
 > formerly baked into a standalone `logsearch-ubuntu2404` box (`ansible/bake-logsearch.yml`,
 > #830). The observability-consolidation epic (`logical-minds-foundry/.github#267`)
@@ -514,8 +450,8 @@ DRBD resource and no iSCSI target; both stay per-run. Host-resolved.
 ## Every Ubuntu box: apt auto-updates disabled at bake (#1225)
 
 Each Ubuntu bake playbook (`bake-obs.yml`, `bake-infra.yml`, `bake-mq-ubuntu.yml`,
-`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`, `bake-san.yml`) opens with its own play that
-runs the `apt-autoupdate-off` role. It runs first so the bake's own apt work never
+`bake-nativeha-ubuntu.yml`) opens with its own play that runs the `apt-autoupdate-off`
+role. It runs first so the bake's own apt work never
 races an auto-update run. The RHEL bakes do not include it: the role is
 apt-specific and asserts a Debian-family host.
 
@@ -526,26 +462,22 @@ apt-specific and asserts a Debian-family host.
 Rationale: the weekly cold rebuild plus the staleness gate is the update path,
 so the boxes carry no in-guest updater. See [`box-model.md` §5](box-model.md#5-os-currency-comes-from-rebuilding-the-box).
 The role is in each Ubuntu bake's manifest-hash closure, so introducing it (and
-any later edit to it) flips all six Ubuntu boxes to BUILD. The RHEL boxes are
-unaffected.
+any later edit to it) flips the boxes of all four Ubuntu roles to BUILD. The RHEL boxes
+are unaffected.
 
 ## Stays configure (per-run) — never baked
 
 The whole configure surface: queue-manager and cluster creation
-(`mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `rdqm-ha`, `pcmk-cluster`,
-`pcmk-stonith`); RDQM/HA/DR state and reconcile (`rdqm-active-node`, `rdqm-state`,
-`cluster-state`, `nativeha-state` — these three collector roles only render the env
-file and enable the timer of the baked `mq-resiliency-observability` component —
-`host-resolver`, `net-reach`);
-all PKI/TLS (`lab-pki`, `pki-distribute`, `rdqm-replication-tls`, `pdrbd-replication-tls`, `rdqm-app-tls`,
-`rdqm-ssh-access`); messaging config (`mq-inter-qm` — the channels and keystores,
-plus the responder's env file and QM-ordering drop-in — and `app-requester` and
-`bench-client`, which render the requester's env file and the `mq-bench` wrapper;
-all three drive the baked `mq-resiliency-clients` component and install no client
-code — `mq-event-monitor`, `mq-diag-logging` per-QM `qmini`); the SAN/iSCSI substrate
-(`iscsi-initiator`, plus the DRBD resource and iSCSI target configuration halves of
-`drbd-san` and `iscsi-target`, whose install halves are baked into `san-ubuntu26`); and
-`mqweb` (per-QM REST config, the registry encoded with the AES key made from the
+(`mq-qmgr`, `mq-nativeha`, `rdqm-ha`); RDQM/HA/DR state and reconcile
+(`rdqm-active-node`, `rdqm-state`, `nativeha-state` — these two collector roles only
+render the env file and enable the timer of the baked `mq-resiliency-observability`
+component — `host-resolver`, `net-reach`); all PKI/TLS (`lab-pki`, `pki-distribute`,
+`rdqm-replication-tls`, `rdqm-app-tls`, `rdqm-ssh-access`); messaging config
+(`mq-inter-qm` — the channels and keystores, plus the responder's env file and
+QM-ordering drop-in — and `app-requester` and `bench-client`, which render the
+requester's env file and the `mq-bench` wrapper; all three drive the baked
+`mq-resiliency-clients` component and install no client code — `mq-event-monitor`,
+`mq-diag-logging` per-QM `qmini`); and `mqweb` (per-QM REST config, the registry encoded with the AES key made from the
 injected `mqweb_aes_passphrase`, so it is configure even though the mqweb *server*
 binary is installed by `rdqm-install`).
 
@@ -583,9 +515,9 @@ The real smell this surfaces is duplication, not misnaming: the MQ-product insta
 (fetch the arch-correct tar → `mqlicense -accept` → install) is copied across
 `rdqm-install`, `mq-nativeha` (RedHat + Debian), `mq-install`, and `mq-client`,
 with no shared building block. Baking makes it visible — the product install is now
-baked into **five** boxes: `mq-rdqm-rhel9` (via `rdqm-install`), `mq-nativeha-rhel9`
+baked into **four** boxes: `mq-rdqm-rhel9` (via `rdqm-install`), `mq-nativeha-rhel9`
 and `mq-nativeha-ubuntu24` (via `mq-nativeha` `install-RedHat`/`install-Debian`), and
-`mq-client-ubuntu24` and `pcmk-ubuntu24` (via `mq-install`). Now that the arch-native
+`mq-client-ubuntu24` (via `mq-install`). Now that the arch-native
 box-building epic (`logical-minds-foundry/.github#103`) has baked the remaining
 Ubuntu arms, that duplication is fully in the open across every box — so extracting
 a shared `mq-product-install` `tasks_from` is the live cleanup this surfaces, no

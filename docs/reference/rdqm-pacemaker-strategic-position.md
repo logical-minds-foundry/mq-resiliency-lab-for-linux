@@ -2,9 +2,10 @@
 
 > Scope: where IBM is taking **RDQM** relative to **Native HA**, how quickly IBM
 > follows new **RHEL** releases with RDQM kernel modules, what the DRBD/Pacemaker
-> ecosystem signals, how the lab justifies its **`pcmk-ubuntu`** stack, and the
-> **recorded decision** on the future of the lab's two secondary HA stacks
-> (`rdqm-rhel`, `pcmk-ubuntu`). This is the research write-up for
+> ecosystem signals, how the lab justified its **`pcmk-ubuntu`** stack (since
+> removed; see the 2026-11 update below), and the **recorded decision** on the
+> future of the lab's then two secondary HA stacks (`rdqm-rhel`,
+> `pcmk-ubuntu`). This is the research write-up for
 > [logical-minds-foundry/.github#309](https://github.com/logical-minds-foundry/.github/issues/309),
 > a follow-on of the multi-version OS-axis epic
 > [logical-minds-foundry/.github#280](https://github.com/logical-minds-foundry/.github/issues/280).
@@ -41,6 +42,15 @@
 >
 > The decision in §1 is unchanged. The current support cells are in
 > [`os-version-support-matrix.md`](os-version-support-matrix.md) §2.4.
+>
+> **Update (2026-11).** The lab has since removed its two open-source Pacemaker
+> stacks, `pcmk-ubuntu` (Pacemaker on a shared SAN) and `pcmk-drbd-ubuntu`
+> (Pacemaker with DRBD), from its code (#1733–#1735). Three stacks remain:
+> `rdqm-rhel`, `nativeha-rhel-crr` and `nativeha-ubuntu`. **RDQM is now the
+> lab's one counter-option to Native HA**, kept while IBM supports it. This
+> supersedes the parts of §1, §6 and §7 that keep Pacemaker/DRBD stacks as lab
+> arms. RDQM's own dependency on Pacemaker and DRBD (§3, §4) is unaffected. §5
+> is kept as the historical record of how `pcmk-ubuntu` was justified.
 
 ## 1. Decision (recorded 2026-10-09)
 
@@ -55,7 +65,8 @@ deprecation and that the lab should "deprecate the trailing edge".
   the lab's "Linux resiliency options" umbrella, **for as long as IBM supports
   them**. They are dropped only once IBM itself deems them non-strategic. In
   short: *we can't support what IBM doesn't, and we don't drop what IBM still
-  supports.*
+  supports.* (The Pacemaker/DRBD stacks were later removed; RDQM stays. See
+  the 2026-11 update above.)
 - **NAS-based multi-instance queue managers are deliberately out of scope.**
 - **Outcome: keep as-is.** No deprecation epic, no "legacy" banner on the
   stacks, and no per-stack RHEL minor pins now.
@@ -360,6 +371,10 @@ deprecation and that the lab should "deprecate the trailing edge".
 
 ## 5. Justifying `pcmk-ubuntu`
 
+> **Historical.** `pcmk-ubuntu` has since been removed from the lab (see the
+> 2026-11 update at the top). This section records the case as it was made on
+> 2026-10-09; the IBM statements it cites are unchanged.
+
 ### 5.1 What it is, and what IBM says about it
 
 - **[data]** `pcmk-ubuntu` is a community Pacemaker cluster (`pcmk-a1..3`)
@@ -425,8 +440,8 @@ The lab makes Native HA's strategic status explicit wherever users meet the HA
 options:
 
 - The docs site's **Home** page and the **Architecture** page state that Native
-  HA is the strategic choice for new HA deployments, and that RDQM and
-  Pacemaker/DRBD are counter-options kept while IBM supports them.
+  HA is the strategic choice for new HA deployments, and that RDQM is the
+  counter-option kept while IBM supports it.
 - The docs-site **Reference** page links this note.
 - The full docs review in
   [#1263](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1263)

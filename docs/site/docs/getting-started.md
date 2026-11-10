@@ -25,8 +25,8 @@ edition, is fetched automatically by the tooling).
 - **libvirt / QEMU / Vagrant** — the virtualization stack the guests run on.
 - **git** — to clone the lab.
 - **A RHEL subscription** — only for the RHEL-based arms (RDQM, Native HA on
-  RHEL). The canonical `pcmk-ubuntu` arm used throughout this page needs nothing
-  extra.
+  RHEL). The canonical `nativeha-ubuntu` arm used throughout this page needs
+  nothing extra: no RHEL subscription and no RDQM entitlement.
 
 ## 2. Clone the repository
 
@@ -79,11 +79,12 @@ that reason; build the stack on RHEL 9 instead, with `os: rhel:9` in a build fil
 ## 4. Bring up your first stack
 
 One command stands up a whole HA/DR stack. The canonical starting arm is
-**`pcmk-ubuntu`** — Pacemaker/SAN on Ubuntu, subscription-free and x86-native:
+**`nativeha-ubuntu`** — Native HA on Ubuntu, the one stack that needs no RHEL
+subscription and no RDQM entitlement:
 
 ```bash
-uv run mqlab bootstrap pcmk-ubuntu   # net → vms → provision → observe, every step streamed
-uv run mqlab status pcmk-ubuntu      # phase completion (✓/✗) for this stack
+uv run mqlab bootstrap nativeha-ubuntu   # net → vms → provision → observe, every step streamed
+uv run mqlab status nativeha-ubuntu      # phase completion (✓/✗) for this stack
 ```
 
 `bootstrap` runs four idempotent phases in order — define the lab networks, boot
@@ -156,7 +157,7 @@ survives failover. Confirm the queue manager is up, then (via the
 node, and watch the queue manager refloat with the message intact:
 
 ```bash
-mqlab qm status pcmk-ubuntu   # confirm the QM is Started
+mqlab qm status nativeha-ubuntu   # confirm the QM is running (dspmq -o nativeha -x)
 ```
 
 The deep dive below explains what each `mqlab` verb is doing under the hood.
@@ -214,15 +215,14 @@ it, over the live HA site. A stack that declares no DR site to skip rejects
 
 The lab's shape is a single source of truth:
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml)
-— the libvirt networks (data, heartbeat, WAN, client, SVC, SAN), every guest's
+— the libvirt networks (data, heartbeat, WAN, client, SVC), every guest's
 NICs and platform, and the stack registry itself. See the
 [Architecture](architecture/index.md) walkthrough for what each network is for.
 
-The four stacks bootstrap knows about:
+The three stacks bootstrap knows about:
 
 | stack | mechanism | OS |
 |-------|-----------|-----|
-| `pcmk-ubuntu` | Pacemaker/SAN (shared-LUN HA + cross-site DR) | Ubuntu |
 | `rdqm-rhel` | RDQM (DRBD replicated HA/DR) | RHEL |
 | `nativeha-rhel-crr` | Native HA (raft-log replication) | RHEL |
 | `nativeha-ubuntu` | Native HA (raft-log replication) | Ubuntu |
@@ -236,12 +236,11 @@ At the current pins:
 
 | stack | default | also selectable |
 |-------|---------|-----------------|
-| `pcmk-ubuntu` | Ubuntu 26.04 (IBM-unsupported; warns) | Ubuntu 24.04 |
 | `nativeha-ubuntu` | Ubuntu 26.04 (IBM-unsupported; warns) | Ubuntu 24.04 |
 | `nativeha-rhel-crr` | RHEL 10 (10.2; needs an x86-64-v3 host) | RHEL 9 (9.6) |
 | `rdqm-rhel` | RHEL 10 (10.2; needs an x86-64-v3 host) | RHEL 9 (9.6) |
 
-The shared nodes are not selectable. `obs`, the two DNS nodes and the SAN targets
+The shared nodes are not selectable. `obs` and the two DNS nodes
 run no MQ and are on Ubuntu 26.04. The MQ commons (`svc-sim`, `app-client`,
 `mon-probe`) run MQ, and are on Ubuntu 26.04 too, by the same lab decision as the
 Ubuntu defaults (below).
@@ -313,13 +312,13 @@ Two `mqlab vm` utilities render or reach the guests directly:
 
 ```bash
 mqlab vm inventory     # render build/work/inventory.ini from topology — the static map
-mqlab vm ssh pcmk-a1   # drop into a shell on one guest
+mqlab vm ssh nha-ubuntu-a1   # drop into a shell on one guest
 ```
 
 When you're done, tear a stack back down:
 
 ```bash
-mqlab teardown pcmk-ubuntu   # destroy the stack's guests + overlay disks
+mqlab teardown nativeha-ubuntu   # destroy the stack's guests + overlay disks
 ```
 
 `teardown` reclaims the shared commons VMs (obs/probe/svc/app/infra) only when no
@@ -333,28 +332,23 @@ The `provision` phase already stands the queue manager up as part of bringing a
 stack live — bootstrap leaves you with a running QM. **`mqlab qm`** is the
 lifecycle layer *on top* of that: drive the QM without re-running a whole
 bootstrap. It dispatches per stack, so the same verbs cover every mechanism
-(Pacemaker `pcs`, RDQM, Native HA `systemctl`).
+(RDQM, Native HA `systemctl`).
 
 ```bash
-mqlab qm status pcmk-ubuntu   # pcs status resources — where mq_group is Started
-mqlab qm down   pcmk-ubuntu   # stop the QM cluster-side (pcs resource disable)
-mqlab qm up     pcmk-ubuntu   # start it again (pcs resource enable)
-mqlab qm create pcmk-ubuntu   # (re)build the QM + its HA resource group
-mqlab qm destroy pcmk-ubuntu  # remove the QM + its HA resources
+mqlab qm status nativeha-ubuntu   # dspmq -o nativeha -x — the instance roles
+mqlab qm down   nativeha-ubuntu   # stop the QM (systemctl stop mqmonitor@<qm>)
+mqlab qm up     nativeha-ubuntu   # start it again (systemctl start mqmonitor@<qm>)
+mqlab qm create nativeha-ubuntu   # (re)run the stack's provision playbook
 ```
 
-For the Pacemaker/SAN stack, `qm create` runs the **`mq-pcmk-qmgr` Ansible
-role**: the queue manager is created on the shared LUN, taught to every node
-(`dspmqinf` → `addmqinf`), wrapped in a **disabled** systemd unit, and handed to
-Pacemaker as the `mq_fs` → `mq_vip` → `mq_qm` resource group. `qm up` / `qm down`
-go **through Pacemaker** — `pcs resource enable` / `disable mq_group` on the
-cluster's first node. Because the systemd units are disabled, the cluster is the
-*only* thing that starts the QM; you never `strmqm` it by hand.
+For `nativeha-ubuntu`, `qm create` runs the stack's provision playbook,
+`site-nativeha-ubuntu.yml`, and `qm up` / `qm down` drive the queue manager's
+`mqmonitor@` systemd unit on each node.
 
-The role is the point: the streamed, verbatim task output *is* the reproducible,
-step-by-step HA procedure — the artifact a client re-implements under their own
-automation. Watching it run is how you come to understand exactly how MQ HA is
-built on Pacemaker/SAN.
+The playbook is the point: the streamed, verbatim task output *is* the
+reproducible, step-by-step HA procedure — the artifact a client re-implements
+under their own automation. Watching it run is how you come to understand
+exactly how MQ HA is built.
 
 > **Which verbs each arm supports** is a live matrix: `mqlab parity` prints it,
 > and `mqlab --help` (or `mqlab <group> --help`) lists the full command surface —
@@ -365,20 +359,20 @@ built on Pacemaker/SAN.
 
 The quickest proof that a stack works is to bootstrap one arm and exercise it: a
 queue manager, a simulated upstream (`svc-sim`), and an application client
-exchanging messages over the client network. The canonical `pcmk-ubuntu` arm
-above does this; an even lighter arm to try is **Native HA on Ubuntu** (no SAN,
-and it boots native on an x86 dev host):
+exchanging messages over the client network. The canonical `nativeha-ubuntu`
+arm above does this:
 
 ```bash
 mqlab bootstrap nativeha-ubuntu   # bring the whole arm up end to end
-mqlab qm status  nativeha-ubuntu  # confirm the QM is up: dspmq -o nativeha -x on both sites
+mqlab qm status nativeha-ubuntu   # confirm the QM is up: dspmq -o nativeha -x on both sites
 ```
 
 Send a message, then stop the active instance and watch the standby take over —
 the QM survives, because that is the whole point of the arm.
 
 From there, the [Architecture](architecture/index.md) page walks the
-higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN alternative.
+higher-order arms: the RDQM 3+3 HA/DR cluster and Native HA with cross-region
+replication on RHEL.
 
 ## Watch the lab live (observability)
 
@@ -446,7 +440,7 @@ Health** board (`lab-fleet-node`) still renders a tile per node, at `/d/lab-flee
 **mqweb is not the Watcher.** The MQ **admin REST API and Console** (`mqweb`,
 `9443/HTTPS`) is a separate surface from the observability plane above. It is
 **data-plane infrastructure** co-located with each queue manager — reached at the
-QM's data-plane VIP (Pacemaker / RDQM) or the active instance's node IP (Native HA,
+QM's data-plane VIP (RDQM) or the active instance's node IP (Native HA,
 which has no VIP) — **not** on the management / Watcher plane.
 `mqlab console open <stack>` finds a stack's live mqweb and prints the MQ Console
 URL and logins (see [Using the MQ Console](operate/index.md#using-the-mq-console)).
@@ -458,10 +452,11 @@ you can *watch*. Kill a live cluster node the same way the lab exposes every
 other step — by hand, with `virsh`:
 
 ```bash
-virsh -c qemu:///system destroy lab_pcmk-a2   # yank a node out from under the cluster
+virsh -c qemu:///system destroy lab_nha-ubuntu-a2   # yank a node out from under the cluster
 ```
 
-That node's tile turns red within a scrape interval while Pacemaker refloats the
-QM elsewhere; bring it back (`mqlab bootstrap pcmk-ubuntu`, which resumes at the
+That node's tile turns red within a scrape interval while the queue manager keeps
+running on the remaining Native HA instances; bring it back (`mqlab bootstrap
+nativeha-ubuntu`, which resumes at the
 `vms` phase) and the tile turns green again. That live red↔green flip is the
 point — a fault you can *watch*.

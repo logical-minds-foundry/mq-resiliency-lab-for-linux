@@ -28,7 +28,6 @@ h2 { margin:0 0 4px 0; }
 .net-priv { background:#143b2e; border:1px solid #3fae7a; }
 .net-wan  { background:#52331f; border:1px solid #d98a4a; }
 .net-data { background:#1b2c4a; border:1px solid #5a7fb0; }
-.net-san  { background:#3a234a; border:1px solid #9a6fb0; }
 .net-mgmt { background:#2a2a2a; border:1px solid #888; }
 .net-ext  { background:#4a2a34; border:1px solid #c56a86; }
 .admin { border:1px dashed #c9a24a; border-radius:9px; padding:8px; margin:6px 0; background:rgba(201,162,74,0.06); }

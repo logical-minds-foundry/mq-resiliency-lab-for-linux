@@ -165,8 +165,8 @@ so older reports still diff.
     this time, about 240 s of a cold run, was in no phase at all.
     - `prereq:vms` has `reconcile box meta`, `box ensure` (the box builders,
       including the DVD stage) and `mq artifacts`.
-    - `prereq:provision` has `mq artifacts`, `san debs`,
-      `ansible collections` and `pki ensure`.
+    - `prereq:provision` has `mq artifacts`, `ansible collections` and
+      `pki ensure`.
     - `prereq:observe` has `pki ensure` only when this run has not already
       ensured the PKI. Provision and observe both declare it, but the second
       play is redundant within a run. It is controller-local and idempotent,

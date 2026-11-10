@@ -19,10 +19,10 @@ live on disk, see [`build-layout.md`](build-layout.md).
 The fleet is **generated from the OS version catalog**,
 [`lab/versions.yaml`](../../lab/versions.yaml) (epic
 `logical-minds-foundry/.github#280`). Nothing else writes a box name or an OS
-version by hand. At today's versions the lab builds **eleven boxes locally**: the
-bare `rhel/9-x86_64` base box plus **ten per-role fat boxes** (on an `aarch64` host,
-which cannot run RHEL, the eight Ubuntu fat boxes alone). An x86-64-v3 host with KVM
-builds **fourteen**: it adds the RHEL 10 trio, the bare `rhel/10-x86_64` base box,
+version by hand. At today's versions the lab builds **eight boxes locally**: the
+bare `rhel/9-x86_64` base box plus **seven per-role fat boxes** (on an `aarch64` host,
+which cannot run RHEL, the five Ubuntu fat boxes alone). An x86-64-v3 host with KVM
+builds **eleven**: it adds the RHEL 10 trio, the bare `rhel/10-x86_64` base box,
 `mq-nativeha-rhel10` and `mq-rdqm-rhel10` (see "RHEL 10" below). Each fat box is a
 **minimal per-role fat box**: it carries only the install surface that role needs,
 nothing more. The taxonomy is **role × OS major × host-arch**:
@@ -37,10 +37,7 @@ nothing more. The taxonomy is **role × OS major × host-arch**:
 | `infra-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
 | `mq-client-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe), on the `infra_mq:` OS (`ubuntu:26` by lab decision, #1285; it replaced `mq-client-ubuntu24`) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the guest runtime + `mq-resiliency-clients` (ibmmq: wheel on x86_64, compiled from sdist at bake on aarch64; replaces the pre-#294 responder venv, #1227) |
 | `mq-nativeha-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` when `nativeha-ubuntu` is built with `os: ubuntu:24` (the IBM-listed Ubuntu) | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
-| `pcmk-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` — when `pcmk-ubuntu` is built with `os: ubuntu:24` (the IBM-listed Ubuntu) | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
 | `mq-nativeha-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `nha-ubuntu-*` on the stack default, `ubuntu:26` (IBM-unsupported; default by lab decision, #1285; see *Shared nodes* below) | the same bake as `mq-nativeha-ubuntu24`, on 26.04 |
-| `pcmk-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `pcmk-*` on the stack default, `ubuntu:26` (IBM-unsupported; default by lab decision, #1285; see *Shared nodes* below) | the same bake as `pcmk-ubuntu24`, on 26.04 (pacemaker 3.0 / pcs 0.12) |
-| `san-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | the SAN targets — `san-a`, `san-b` | the install halves of `drbd-san` (`drbd-utils` + the kernel-modules package with the in-tree DRBD module: `linux-modules-<kver>` on 26.04, which has no `linux-modules-extra`) and `iscsi-target` (`targetcli-fb`), **no** MQ, **no** DRBD resource or iSCSI target (both per-run; #1278, spec §4.7.1) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
 
 "The guest runtime" is the pinned python-build-standalone CPython at
 `/opt/vergil/cpython-<minor>/`; `mq-resiliency-observability` (the HA/DR state
@@ -54,7 +51,7 @@ and no collector is copied into `/usr/local/bin` any more.
 
 A box that contains a fixed OS carries that OS's **short major** in its name:
 `<role>-<os><major>`. The roles are the catalog's `roles:` keys (`infra`, `obs`,
-`mq-client`, `san`, `mq-nativeha`, `pcmk`, `mq-rdqm`); the OS is a catalog `os:` entry. A
+`mq-client`, `mq-nativeha`, `mq-rdqm`); the OS is a catalog `os:` entry. A
 RHEL base box is `rhel/<major>-x86_64`. Caches follow the box name (§3). The
 point release (RHEL 9.6, a cloud-image version) is a **pin** in the catalog, not
 part of the name, so moving 9.6 to 9.7 is a re-pin and a rebake, never a rename.
@@ -63,7 +60,7 @@ never carry a version. A playbook may carry the OS family
 (`bake-nativeha-rhel.yml`), because a family is not a version.
 
 `src/mqlab/box.py` builds the fleet from `Catalog.all_boxes`: the shared boxes on
-their shared OS (see *Shared nodes* below: `infra`, `obs` and `san` on the catalog's `infra:` OS,
+their shared OS (see *Shared nodes* below: `infra` and `obs` on the catalog's `infra:` OS,
 `mq-client` on its `infra_mq:` OS), then each stack's box roles on every OS major that
 stack supports and this host can run, plus one RHEL
 base box per catalog RHEL major. RHEL is `x86_64`-only, so on an `aarch64` host the
@@ -79,8 +76,8 @@ nodes declare in `lab/topology.yaml` (`versions.stack_roles`).
 `versions.node_boxes` (in `src/mqlab/versions.py`) turns roles into boxes for every
 node at once:
 
-- a shared node gets its role on its shared OS (`Catalog.shared_os`; see *Shared nodes* below): `infra`,
-  `obs` and `san` (the SAN targets) on the catalog's `infra:` OS, `mq-client` on its
+- a shared node gets its role on its shared OS (`Catalog.shared_os`; see *Shared
+  nodes* below): `infra` and `obs` on the catalog's `infra:` OS, `mq-client` on its
   `infra_mq:` OS. No instance record is consulted;
 - every other node gets its role on its owning stack's OS: the stack's instance
   record when it has one, else the stack's catalog default.
@@ -98,7 +95,7 @@ Shared (commons) nodes are never selectable. They split by **whether they run MQ
 
 | Catalog key | Roles | Nodes | OS today | Support-gated? |
 |-------------|-------|-------|----------|----------------|
-| `infra:` | `infra`, `obs`, `san` | `infra-client`, `infra-svc`, `obs`, `san-a`, `san-b` | `ubuntu:26` | no: no MQ runs there |
+| `infra:` | `infra`, `obs` | `infra-client`, `infra-svc`, `obs` | `ubuntu:26` | no: no MQ runs there |
 | `infra_mq:` | `mq-client` | `svc-sim`, `app-client`, `mon-probe` | `ubuntu:26` (by lab decision, #1285) | yes, like a stack default |
 
 **The support gate.** IBM's MQ 10.0 SPCR lists no Ubuntu 26.04 row
@@ -111,8 +108,8 @@ of IBM: `lab_default_decision: { decided: "<YYYY-MM-DD>", ref: "<owner>/<repo>#<
 entry is refused as stale. `infra:` is not gated, because nothing on those nodes runs
 MQ. So today:
 
-- `infra:` is `ubuntu:26`: the non-MQ shared nodes and the SAN targets run 26.04.
-- `infra_mq:` and both Ubuntu stack defaults are `ubuntu:26`, ahead of IBM, by the
+- `infra:` is `ubuntu:26`: the non-MQ shared nodes run 26.04.
+- `infra_mq:` and the Ubuntu stack's default are `ubuntu:26`, ahead of IBM, by the
   decision `os.ubuntu.26` records (#1285, 2026-10-14). The MQ commons boot
   `mq-client-ubuntu26`.
 - Bootstrap still prints the catalog's warning for 26, default or not
@@ -126,7 +123,7 @@ MQ. So today:
   prints even when the commons are already running, because the stack runs its MQ
   through them either way. It needs no revert: once `ibm_support` flips to
   `supported` and the decision is removed, it is gone.
-- Both Ubuntu stacks list `supported: [ubuntu:24, ubuntu:26]`. A build file with
+- The Ubuntu stack (`nativeha-ubuntu`) lists `supported: [ubuntu:24, ubuntu:26]`. A build file with
   `os: ubuntu:24` (`mqlab bootstrap <stack> --config <file>`) builds the stack on
   24.04, the IBM-listed Ubuntu, with no stack warning (the `infra_mq` warning
   remains).
@@ -136,27 +133,18 @@ When an "Ubuntu 26.04 LTS" row appears in the SPCR, the same change flips
 
 **What differs on 26.04.** The live T0b spike
 ([`2026-10-os-axis-spike.md`](../reports/2026-10-os-axis-spike.md)) pinned the base
-box (`20260927.0.0`, libvirt amd64 + arm64) and the package set. Three changes reach
-the roles:
+box (`20260927.0.0`, libvirt amd64 + arm64) and the package set. One change reaches
+the retained roles:
 
 - cloud-init 26.x runs as one `cloud-init-main.service` that every stage unit
   triggers, and `cloud-init.service` is now `cloud-init-network.service`. So
   `cloud-init-trim`'s `vars/Ubuntu-26.yml` masks nothing and requires the new unit
   set (§2, *cloud-init and snapd trimmed off the boot path*).
-- `linux-modules-extra-*` is gone (Canonical deprecated it from the 6.15 kernel), so
-  `drbd-san`'s `vars/Ubuntu-26.yml` names the base `linux-modules-<kver>`, which
-  already carries `drbd.ko` and the LIO target modules. The in-tree module is still
-  DRBD 8.4.11 driven by drbd-utils 9.22.0, the same pairing as 24.04.
-- targetcli-fb 3.0.1 auto-creates its default portal on `[::0]:3260`, not
-  `0.0.0.0:3260`
-  ([v3.0.1 release](https://github.com/open-iscsi/targetcli-fb/releases/tag/v3.0.1)).
-  `iscsi-target` and the pcmk DR cutover scripts drop either wildcard before binding
-  the SAN-net portal.
 
-pacemaker 3.0.1 / pcs 0.12.1 (24.04: 2.1.6 / 0.11.7) needed no role change: none of
-the `pcs` commands the Pacemaker roles use was removed (the citations are in
-`pcmk-cluster`, `pcmk-stonith` and `mq-pcmk-qmgr`). The guest components need nothing
-per OS either: the pinned runtime is one glibc build per arch, and the observability
+The spike's other two findings (the dropped `linux-modules-extra-*` package and
+targetcli-fb's new `[::0]:3260` default portal) touched only the SAN-target roles of
+the since-removed Pacemaker stacks (epic `.github#399`). The guest components need
+nothing per OS: the pinned runtime is one glibc build per arch, and the observability
 component is stdlib-only.
 
 ### The one-time rename (#1274)
@@ -170,10 +158,13 @@ place, [`src/mqlab/retired_boxes.py`](../../src/mqlab/retired_boxes.py):
 | `infra-ubuntu2404` | `infra-ubuntu24` |
 | `mq-ubuntu2404` | `mq-client-ubuntu24` |
 | `mq-nativeha-ubuntu` | `mq-nativeha-ubuntu24` |
-| `pcmk-ubuntu` | `pcmk-ubuntu24` |
+| `pcmk-ubuntu` | — (stack removed) |
 | `rhel/9.6-x86_64` | `rhel/9-x86_64` |
 
 `mq-rdqm-rhel9` and `mq-nativeha-rhel9` already fit the rule and keep their names.
+The same file also lists the boxes of the stacks the lab no longer carries
+(`pcmk-ubuntu24`/`26`, `pdrbd-ubuntu24`/`26` and the SAN targets' `san-ubuntu24`/`26`;
+epic `.github#399`), so the steps below reclaim them too on a host that built them.
 The first build after the rename re-bakes every fat box, once. To
 migrate a host:
 
@@ -188,16 +179,13 @@ migrate a host:
    cached Vagrant `box_meta` names a retired box (or any box other than the one the
    topology now assigns, #858), so a retired box is never booted.
 
-**Host-resolved vs. arch-pinned.** The eight Ubuntu fat boxes are **host-resolved**:
+**Host-resolved vs. arch-pinned.** The five Ubuntu fat boxes are **host-resolved**:
 each builds natively for whatever architecture the host runs — `aarch64` on an
 Apple-silicon host, `x86_64` on an x86 host — so the guest arch is never pinned.
 The four RHEL fat boxes (`mq-rdqm-rhel9`, `mq-nativeha-rhel9`, `mq-rdqm-rhel10`,
 `mq-nativeha-rhel10`) are **`x86_64`-only**;
 building any of them on an ARM host is **refused**, not emulated (design D11) — their
-RHEL DVD and MQ's LinuxX64 tarball are x86_64 artifacts. The Pacemaker arm's SAN
-targets (`san-a`/`san-b`) carry no MQ payload; they boot the host-resolved
-`san-ubuntu26` box, which bakes their DRBD + LIO install halves on the target OS
-itself (#1278, spec §4.7.1; it replaced the controller-side SAN deb cache).
+RHEL DVD and MQ's LinuxX64 tarball are x86_64 artifacts.
 
 The three shared Ubuntu MQ commons (svc / app / probe) all boot the **one**
 `mq-client-ubuntu26` box: its server-set install carries the client and SDK too, so a
@@ -342,8 +330,8 @@ roughly 4.5 of its 12 vCPUs, and OpenSearch was still not listening at 16
 minutes. The sampler's logins, Ansible's own re-logins (ControlPersist expires
 between plays) and operator SSH all trigger it.
 
-So every baked Ubuntu box (`obs`, `infra`, `mq-client`, `mq-nativeha`, `pcmk` and
-`san`, on every Ubuntu major) runs the `motd-off` role in
+So every baked Ubuntu box (`obs`, `infra`, `mq-client` and `mq-nativeha`, on every
+Ubuntu major) runs the `motd-off` role in
 its own play near the end of its bake:
 
 - It comments out both `pam_motd.so` session lines in `/etc/pam.d/sshd` and
@@ -427,10 +415,10 @@ mgmt-NIC network config and an in-guest root grow. That is a bigger change,
 left for later.
 
 **snapd.** `snapd.seeded.service` is only `snap wait system seed.loaded`, and it
-is `Before=multi-user.target`, so it holds boot until snapd has started. Five of
-the six Ubuntu boxes have no snaps at all: the base seeds none (its
+is `Before=multi-user.target`, so it holds boot until snapd has started. Three of
+the four Ubuntu box roles have no snaps at all: the base seeds none (its
 `state.json` reads seeded with zero snaps), and no bake role installs one. The
-fifth is **obs on aarch64**. There `grafana-image-renderer`'s browser is the
+fourth is **obs on aarch64**. There `grafana-image-renderer`'s browser is the
 distro `chromium-browser`, which on 24.04 is a transitional deb that installs
 the chromium snap. The baked obs box carries `chromium`, `cups`, `core24`,
 `gnome-46-2404`, `mesa-2404`, `gtk-common-themes`, `bare` and `snapd` snaps (the
@@ -564,7 +552,7 @@ run and `vagrant up` reuses them.
 ### Unreferenced boxes (`box gc --unreferenced`)
 
 A catalog re-pin leaves boxes behind. When `infra:` moved from `ubuntu:24` to
-`ubuntu:26` (#1282), `infra-ubuntu24`, `obs-ubuntu24` and `san-ubuntu24` stayed
+`ubuntu:26` (#1282), `infra-ubuntu24` and `obs-ubuntu24` stayed
 registered and cached, several GB each per host. They are not retired names: `ubuntu:24`
 is still a catalog OS, and re-pinning `infra` back would resolve them again. So the
 retired-names pass keeps them, and nothing else removes them. `mqlab box gc
@@ -573,10 +561,10 @@ retired-names pass keeps them, and nothing else removes them. `mqlab box gc
 **The protected set** is every box name a current catalog selection can resolve to, on
 *any* host (`box.resolvable_box_names`):
 
-- each shared role on its shared OS: `infra`, `obs` and `san` on `infra`, and
+- each shared role on its shared OS: `infra` and `obs` on `infra`, and
   `mq-client` on `infra_mq`;
 - every stack's roles on every OS the stack **supports**, not only its default (so
-  `mq-nativeha-ubuntu24` and `pcmk-ubuntu24` stay protected now the defaults are 26);
+  `mq-nativeha-ubuntu24` stays protected now the defaults are 26);
 - every catalog OS's base box (`rhel/9-x86_64`, `rhel/10-x86_64`, the cloud images).
 
 This is `Catalog.all_boxes` with the host filter dropped. It is deliberately not
@@ -649,13 +637,13 @@ The builder REUSEs a cached box only while it is still valid on two axes:
   inputs include the **OS pin** (`--os-pin <base_box>@<pin>`: the RHEL point release
   or the Ubuntu cloud-image version), so a catalog re-pin forces a rebake (#1274).
   For the **MQ-bearing** boxes (every OS major of the `mq-rdqm`, `mq-client`,
-  `mq-nativeha`, `pcmk` and `pdrbd` roles, for example `mq-rdqm-rhel10`,
-  `mq-client-ubuntu26`, `mq-nativeha-ubuntu26` and `pcmk-ubuntu26` — the roles flagged `mq_bearing: true`
+  and `mq-nativeha` roles, for example `mq-rdqm-rhel10`,
+  `mq-client-ubuntu26` and `mq-nativeha-ubuntu26` — the roles flagged `mq_bearing: true`
   in [`lab/versions.yaml`](../../lab/versions.yaml), passed as `--mq-bearing 1`) the
   single-source MQ-version pin [`lab/mq-version`](../../lab/mq-version) is folded
   into that hash (#1087/#1088), so bumping the pin flips exactly those boxes to
   BUILD on the next bootstrap while the non-MQ boxes (`obs-ubuntu26`,
-  `infra-ubuntu26` and `san-ubuntu26`) stay REUSE — a
+  and `infra-ubuntu26`) stay REUSE — a
   pin bump rebases the MQ box layer with no manual `mqlab box rebuild`.
   For a box that bakes **guest components** (`roles.<role>.components`), the hash
   also folds in the pinned guest runtime (`--runtime-pin <version>+<pbs_release>`)
@@ -689,7 +677,7 @@ because the baked boxes and the running VMs live on **different disks**:
 | **Stack loop** | teardown → bootstrap | only the guest VMs | **No** — reuses the already-registered baked images | lowest |
 
 - **Nuclear** — wiping the data disk drops the box cache, so the next build takes
-  the BUILD path and re-bakes all eight fat boxes (plus the base box, and
+  the BUILD path and re-bakes every fat box (plus the base box, and
   re-acquires the entitlement-gated state media). This is the only tier that pays
   the full bake cost.
 - **VM rebuild** — `vrg-vm rebuild` re-provisions the dev VM, wiping the boot disk;
@@ -754,7 +742,7 @@ still bounding how stale a box's base OS can get.
 ### No in-guest apt auto-updates (#1225)
 
 The same reasoning rules out Ubuntu's in-guest auto-updater. Every baked Ubuntu
-box (`obs`, `infra`, `mq-client`, `mq-nativeha`, `pcmk` and `san`, on every Ubuntu
+box (`obs`, `infra`, `mq-client` and `mq-nativeha`, on every Ubuntu
 major) runs the `apt-autoupdate-off` role as the **first play** of its
 bake. The role masks `apt-daily.timer`, `apt-daily-upgrade.timer`,
 `apt-daily.service`, `apt-daily-upgrade.service` and

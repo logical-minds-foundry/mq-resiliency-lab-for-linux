@@ -22,7 +22,7 @@ All of those are gone; the provisioning roles delete them if they find them.
 
 | Component | Import package | Baked into (box role) | What it runs |
 |---|---|---|---|
-| [`mq-resiliency-observability`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/components/mq-resiliency-observability/README.md) | `mqro` | `mq-rdqm`, `mq-nativeha`, `pcmk`, `san` | the stdlib-only, non-MQI HA/DR state collectors `lab-cluster-state`, `lab-nativeha-state`, `lab-loglifecycle-state`, `lab-rdqm-state`, each writing a node_exporter textfile on a 5-second timer |
+| [`mq-resiliency-observability`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/components/mq-resiliency-observability/README.md) | `mqro` | `mq-rdqm`, `mq-nativeha` | the stdlib-only, non-MQI HA/DR state collectors `lab-nativeha-state`, `lab-loglifecycle-state`, `lab-rdqm-state`, each writing a node_exporter textfile on a 5-second timer |
 | [`mq-resiliency-clients`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/components/mq-resiliency-clients/README.md) | `mqrc` | `mq-client` (`svc-sim`, `app-client`, `mon-probe`) | `mq-app-requester`, `mq-svc-responder`, `mq-bench`, the authorization / dead-letter / reconnect probes, and the DR flow, responder and loss-analysis clients |
 
 The box roles come from `roles.<role>.components` in
@@ -76,7 +76,7 @@ example, the on-demand benchmark is
 
 A box bake runs the `runtime-install` role and then the `component-install` role
 for each component the box bakes. The units are installed but left **inert**.
-At provision time, the per-run roles (`cluster-state`, `nativeha-state`,
+At provision time, the per-run roles (`nativeha-state`,
 `rdqm-state`, `app-requester`, `mq-inter-qm`, `bench-client`) check that the
 component is baked, render its env files and enable its units. A committed change
 to a component, or a bump of the runtime pin, changes the box's manifest hash, so

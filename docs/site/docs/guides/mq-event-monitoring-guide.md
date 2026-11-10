@@ -235,7 +235,7 @@ properties are why it exists rather than putting `amqsevt` inline:
 
 !!! note "How this lab implements it"
     This lab wires the feed end to end: the shared `mq-event-monitor` role deploys
-    the `SERVICE` on **every queue manager across all stacks** — all four HA/DR
+    the `SERVICE` on **every queue manager across all stacks** — all three HA/DR
     arms plus the shared `SVCQM` counterparty — (its supervising wrapper restarts
     `amqsevt` on crash and forwards its JSON to **journald**; the proven mechanism and
     its live B-matrix are in

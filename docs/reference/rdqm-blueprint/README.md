@@ -1,9 +1,8 @@
 # RDQM blueprint (captured live configuration)
 
 This directory holds the configuration that IBM RDQM **generates** on a live HA/DR
-group. It is the blueprint the `pcmk-drbd-ubuntu` arm (epic
-logical-minds-foundry/.github#310) is built to. The deviation ledger
-[`../rdqm-vs-vanilla-deviations.md`](../rdqm-vs-vanilla-deviations.md) cites it row by row.
+group: the storage, DRBD replication, and Pacemaker and Corosync cluster that sit
+under the lab's `rdqm-rhel` arm. It is a reference for how RDQM builds that stack.
 
 Each `<host>/<item>.txt` file is unedited output from the read-only capture playbook
 `ansible/capture-rdqm-blueprint.yml`, with two redactions. Every fact below cites the

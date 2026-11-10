@@ -64,7 +64,8 @@
   `ansible.builtin` finds only the two collections above (R-6). The mentions of
   `ansible.posix.sysctl` (`opensearch/tasks/install.yml`), `ansible.posix.mount`
   (`pdrbd-qm/tasks/main.yml`) and `community.general` (`drbd-san/tasks/main.yml`)
-  are comments explaining why the code uses a builtin instead.
+  are comments explaining why the code uses a builtin instead. (`pdrbd-qm` and
+  `drbd-san` were removed later, with the open-source Pacemaker stacks.)
 
 ### 1.3 Interpreters the dependencies run against
 
@@ -304,7 +305,8 @@ support matrix (S-6).
   `community.crypto` argument passes lint and fails only at runtime. It has also
   pushed authors away from collection modules: two roles use shell or a
   `sysctl.d` drop-in instead of `ansible.posix.mount` and `ansible.posix.sysctl`,
-  citing the resolver (R-6, the comments in `pdrbd-qm` and `opensearch`).
+  citing the resolver (R-6, the comments in `pdrbd-qm` and `opensearch`;
+  `pdrbd-qm` has since been removed with its stack).
 - **[judgment]** A repo-local fix through `.ansible-lint.yml` (for example
   `mock_modules`, or an `offline`/requirements setting) would **not** take effect
   today, because `vrg-validate` ignores every key but the two above (R-13). The
