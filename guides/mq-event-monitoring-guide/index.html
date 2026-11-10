@@ -1492,7 +1492,7 @@ properties are why it exists rather than putting <code>amqsevt</code> inline:</p
 <div class="admonition note">
 <p class="admonition-title">How this lab implements it</p>
 <p>This lab wires the feed end to end: the shared <code>mq-event-monitor</code> role deploys
-the <code>SERVICE</code> on <strong>every queue manager across all stacks</strong> — all four HA/DR
+the <code>SERVICE</code> on <strong>every queue manager across all stacks</strong> — all three HA/DR
 arms plus the shared <code>SVCQM</code> counterparty — (its supervising wrapper restarts
 <code>amqsevt</code> on crash and forwards its JSON to <strong>journald</strong>; the proven mechanism and
 its live B-matrix are in

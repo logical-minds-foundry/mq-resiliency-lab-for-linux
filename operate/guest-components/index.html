@@ -1418,8 +1418,8 @@ All of those are gone; the provisioning roles delete them if they find them.</p>
 <tr>
 <td><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/components/mq-resiliency-observability/README.md"><code>mq-resiliency-observability</code></a></td>
 <td><code>mqro</code></td>
-<td><code>mq-rdqm</code>, <code>mq-nativeha</code>, <code>pcmk</code>, <code>san</code></td>
-<td>the stdlib-only, non-MQI HA/DR state collectors <code>lab-cluster-state</code>, <code>lab-nativeha-state</code>, <code>lab-loglifecycle-state</code>, <code>lab-rdqm-state</code>, each writing a node_exporter textfile on a 5-second timer</td>
+<td><code>mq-rdqm</code>, <code>mq-nativeha</code></td>
+<td>the stdlib-only, non-MQI HA/DR state collectors <code>lab-nativeha-state</code>, <code>lab-loglifecycle-state</code>, <code>lab-rdqm-state</code>, each writing a node_exporter textfile on a 5-second timer</td>
 </tr>
 <tr>
 <td><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/components/mq-resiliency-clients/README.md"><code>mq-resiliency-clients</code></a></td>
@@ -1520,7 +1520,7 @@ example, the on-demand benchmark is
 <h3 id="baked-inert-started-per-run">Baked inert, started per run<a class="headerlink" href="#baked-inert-started-per-run" title="Permanent link">&para;</a></h3>
 <p>A box bake runs the <code>runtime-install</code> role and then the <code>component-install</code> role
 for each component the box bakes. The units are installed but left <strong>inert</strong>.
-At provision time, the per-run roles (<code>cluster-state</code>, <code>nativeha-state</code>,
+At provision time, the per-run roles (<code>nativeha-state</code>,
 <code>rdqm-state</code>, <code>app-requester</code>, <code>mq-inter-qm</code>, <code>bench-client</code>) check that the
 component is baked, render its env files and enable its units. A committed change
 to a component, or a bump of the runtime pin, changes the box's manifest hash, so

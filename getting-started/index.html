@@ -1229,8 +1229,8 @@ edition, is fetched automatically by the tooling).</p>
 <li><strong>libvirt / QEMU / Vagrant</strong> — the virtualization stack the guests run on.</li>
 <li><strong>git</strong> — to clone the lab.</li>
 <li><strong>A RHEL subscription</strong> — only for the RHEL-based arms (RDQM, Native HA on
-  RHEL). The canonical <code>pcmk-ubuntu</code> arm used throughout this page needs nothing
-  extra.</li>
+  RHEL). The canonical <code>nativeha-ubuntu</code> arm used throughout this page needs
+  nothing extra: no RHEL subscription and no RDQM entitlement.</li>
 </ul>
 <h2 id="2-clone-the-repository">2. Clone the repository<a class="headerlink" href="#2-clone-the-repository" title="Permanent link">&para;</a></h2>
 <p>The lab runs from a checkout of the <code>develop</code> branch, the repository's only
@@ -1273,9 +1273,10 @@ uv-managed interpreter — an existing venv is <strong>not</strong> rebuilt auto
 </div>
 <h2 id="4-bring-up-your-first-stack">4. Bring up your first stack<a class="headerlink" href="#4-bring-up-your-first-stack" title="Permanent link">&para;</a></h2>
 <p>One command stands up a whole HA/DR stack. The canonical starting arm is
-<strong><code>pcmk-ubuntu</code></strong> — Pacemaker/SAN on Ubuntu, subscription-free and x86-native:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># net → vms → provision → observe, every step streamed</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>uv<span class="w"> </span>run<span class="w"> </span>mqlab<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">      </span><span class="c1"># phase completion (✓/✗) for this stack</span>
+<strong><code>nativeha-ubuntu</code></strong> — Native HA on Ubuntu, the one stack that needs no RHEL
+subscription and no RDQM entitlement:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># net → vms → provision → observe, every step streamed</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>uv<span class="w"> </span>run<span class="w"> </span>mqlab<span class="w"> </span>status<span class="w"> </span>nativeha-ubuntu<span class="w">      </span><span class="c1"># phase completion (✓/✗) for this stack</span>
 </code></pre></div>
 <p><code>bootstrap</code> runs four idempotent phases in order — define the lab networks, boot
 the guest fleet, provision the cluster and queue manager, then wire up
@@ -1337,7 +1338,7 @@ different hardware, so compare the two directionally, not second for second.</p>
 survives failover. Confirm the queue manager is up, then (via the
 <a href="../operate/">Operate &amp; Observe</a> walkthrough) put a message, fail the active
 node, and watch the queue manager refloat with the message intact:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># confirm the QM is Started</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># confirm the QM is running (dspmq -o nativeha -x)</span>
 </code></pre></div>
 <p>The deep dive below explains what each <code>mqlab</code> verb is doing under the hood.</p>
 <details class="note">
@@ -1407,10 +1408,10 @@ it, over the live HA site. A stack that declares no DR site to skip rejects
 <code>--no-dr</code> rather than mis-provisioning.</p>
 <p>The lab's shape is a single source of truth:
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml"><code>lab/topology.yaml</code></a>
-— the libvirt networks (data, heartbeat, WAN, client, SVC, SAN), every guest's
+— the libvirt networks (data, heartbeat, WAN, client, SVC), every guest's
 NICs and platform, and the stack registry itself. See the
 <a href="../architecture/">Architecture</a> walkthrough for what each network is for.</p>
-<p>The four stacks bootstrap knows about:</p>
+<p>The three stacks bootstrap knows about:</p>
 <table>
 <thead>
 <tr>
@@ -1420,11 +1421,6 @@ NICs and platform, and the stack registry itself. See the
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code>pcmk-ubuntu</code></td>
-<td>Pacemaker/SAN (shared-LUN HA + cross-site DR)</td>
-<td>Ubuntu</td>
-</tr>
 <tr>
 <td><code>rdqm-rhel</code></td>
 <td>RDQM (DRBD replicated HA/DR)</td>
@@ -1457,11 +1453,6 @@ At the current pins:</p>
 </thead>
 <tbody>
 <tr>
-<td><code>pcmk-ubuntu</code></td>
-<td>Ubuntu 26.04 (IBM-unsupported; warns)</td>
-<td>Ubuntu 24.04</td>
-</tr>
-<tr>
 <td><code>nativeha-ubuntu</code></td>
 <td>Ubuntu 26.04 (IBM-unsupported; warns)</td>
 <td>Ubuntu 24.04</td>
@@ -1478,7 +1469,7 @@ At the current pins:</p>
 </tr>
 </tbody>
 </table>
-<p>The shared nodes are not selectable. <code>obs</code>, the two DNS nodes and the SAN targets
+<p>The shared nodes are not selectable. <code>obs</code> and the two DNS nodes
 run no MQ and are on Ubuntu 26.04. The MQ commons (<code>svc-sim</code>, <code>app-client</code>,
 <code>mon-probe</code>) run MQ, and are on Ubuntu 26.04 too, by the same lab decision as the
 Ubuntu defaults (below).</p>
@@ -1540,10 +1531,10 @@ OS major gets its own baked box. When a catalog change leaves old boxes behind,
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md">box model</a>.</p>
 <p>Two <code>mqlab vm</code> utilities render or reach the guests directly:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>inventory<span class="w">     </span><span class="c1"># render build/work/inventory.ini from topology — the static map</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>pcmk-a1<span class="w">   </span><span class="c1"># drop into a shell on one guest</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>nha-ubuntu-a1<span class="w">   </span><span class="c1"># drop into a shell on one guest</span>
 </code></pre></div>
 <p>When you're done, tear a stack back down:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>teardown<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># destroy the stack's guests + overlay disks</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>teardown<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># destroy the stack's guests + overlay disks</span>
 </code></pre></div>
 <p><code>teardown</code> reclaims the shared commons VMs (obs/probe/svc/app/infra) only when no
 other stack is still up — pass <code>--commons</code> to force their removal, or leave them
@@ -1554,24 +1545,19 @@ cannot wipe everything by accident.</p>
 stack live — bootstrap leaves you with a running QM. <strong><code>mqlab qm</code></strong> is the
 lifecycle layer <em>on top</em> of that: drive the QM without re-running a whole
 bootstrap. It dispatches per stack, so the same verbs cover every mechanism
-(Pacemaker <code>pcs</code>, RDQM, Native HA <code>systemctl</code>).</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># pcs status resources — where mq_group is Started</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>down<span class="w">   </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># stop the QM cluster-side (pcs resource disable)</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>up<span class="w">     </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># start it again (pcs resource enable)</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>create<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># (re)build the QM + its HA resource group</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>destroy<span class="w"> </span>pcmk-ubuntu<span class="w">  </span><span class="c1"># remove the QM + its HA resources</span>
+(RDQM, Native HA <code>systemctl</code>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># dspmq -o nativeha -x — the instance roles</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>down<span class="w">   </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># stop the QM (systemctl stop mqmonitor@&lt;qm&gt;)</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>up<span class="w">     </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># start it again (systemctl start mqmonitor@&lt;qm&gt;)</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>create<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># (re)run the stack's provision playbook</span>
 </code></pre></div>
-<p>For the Pacemaker/SAN stack, <code>qm create</code> runs the <strong><code>mq-pcmk-qmgr</code> Ansible
-role</strong>: the queue manager is created on the shared LUN, taught to every node
-(<code>dspmqinf</code> → <code>addmqinf</code>), wrapped in a <strong>disabled</strong> systemd unit, and handed to
-Pacemaker as the <code>mq_fs</code> → <code>mq_vip</code> → <code>mq_qm</code> resource group. <code>qm up</code> / <code>qm down</code>
-go <strong>through Pacemaker</strong> — <code>pcs resource enable</code> / <code>disable mq_group</code> on the
-cluster's first node. Because the systemd units are disabled, the cluster is the
-<em>only</em> thing that starts the QM; you never <code>strmqm</code> it by hand.</p>
-<p>The role is the point: the streamed, verbatim task output <em>is</em> the reproducible,
-step-by-step HA procedure — the artifact a client re-implements under their own
-automation. Watching it run is how you come to understand exactly how MQ HA is
-built on Pacemaker/SAN.</p>
+<p>For <code>nativeha-ubuntu</code>, <code>qm create</code> runs the stack's provision playbook,
+<code>site-nativeha-ubuntu.yml</code>, and <code>qm up</code> / <code>qm down</code> drive the queue manager's
+<code>mqmonitor@</code> systemd unit on each node.</p>
+<p>The playbook is the point: the streamed, verbatim task output <em>is</em> the
+reproducible, step-by-step HA procedure — the artifact a client re-implements
+under their own automation. Watching it run is how you come to understand
+exactly how MQ HA is built.</p>
 <blockquote>
 <p><strong>Which verbs each arm supports</strong> is a live matrix: <code>mqlab parity</code> prints it,
 and <code>mqlab --help</code> (or <code>mqlab &lt;group&gt; --help</code>) lists the full command surface —
@@ -1581,16 +1567,16 @@ observability stack (<code>mqlab commons</code>).</p>
 <h2 id="exercise-a-stack-end-to-end">Exercise a stack end to end<a class="headerlink" href="#exercise-a-stack-end-to-end" title="Permanent link">&para;</a></h2>
 <p>The quickest proof that a stack works is to bootstrap one arm and exercise it: a
 queue manager, a simulated upstream (<code>svc-sim</code>), and an application client
-exchanging messages over the client network. The canonical <code>pcmk-ubuntu</code> arm
-above does this; an even lighter arm to try is <strong>Native HA on Ubuntu</strong> (no SAN,
-and it boots native on an x86 dev host):</p>
+exchanging messages over the client network. The canonical <code>nativeha-ubuntu</code>
+arm above does this:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># bring the whole arm up end to end</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w">  </span>nativeha-ubuntu<span class="w">  </span><span class="c1"># confirm the QM is up: dspmq -o nativeha -x on both sites</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># confirm the QM is up: dspmq -o nativeha -x on both sites</span>
 </code></pre></div>
 <p>Send a message, then stop the active instance and watch the standby take over —
 the QM survives, because that is the whole point of the arm.</p>
 <p>From there, the <a href="../architecture/">Architecture</a> page walks the
-higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN alternative.</p>
+higher-order arms: the RDQM 3+3 HA/DR cluster and Native HA with cross-region
+replication on RHEL.</p>
 <h2 id="watch-the-lab-live-observability">Watch the lab live (observability)<a class="headerlink" href="#watch-the-lab-live-observability" title="Permanent link">&para;</a></h2>
 <p>A dedicated <strong><code>obs</code></strong> VM runs <strong>Prometheus + Grafana</strong>, scraping <code>node_exporter</code>
 across the whole fleet over the host-only <strong><code>net-mgmt</code></strong> plane — the one network
@@ -1644,7 +1630,7 @@ Health</strong> board (<code>lab-fleet-node</code>) still renders a tile per nod
 <p><strong>mqweb is not the Watcher.</strong> The MQ <strong>admin REST API and Console</strong> (<code>mqweb</code>,
 <code>9443/HTTPS</code>) is a separate surface from the observability plane above. It is
 <strong>data-plane infrastructure</strong> co-located with each queue manager — reached at the
-QM's data-plane VIP (Pacemaker / RDQM) or the active instance's node IP (Native HA,
+QM's data-plane VIP (RDQM) or the active instance's node IP (Native HA,
 which has no VIP) — <strong>not</strong> on the management / Watcher plane.
 <code>mqlab console open &lt;stack&gt;</code> finds a stack's live mqweb and prints the MQ Console
 URL and logins (see <a href="../operate/#using-the-mq-console">Using the MQ Console</a>).
@@ -1653,10 +1639,11 @@ every QM node by default (#1502); see the architecture page's admin-plane sectio
 <p>Because <code>bootstrap</code> already made every node a scrape target, a fault is something
 you can <em>watch</em>. Kill a live cluster node the same way the lab exposes every
 other step — by hand, with <code>virsh</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>virsh<span class="w"> </span>-c<span class="w"> </span>qemu:///system<span class="w"> </span>destroy<span class="w"> </span>lab_pcmk-a2<span class="w">   </span><span class="c1"># yank a node out from under the cluster</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>virsh<span class="w"> </span>-c<span class="w"> </span>qemu:///system<span class="w"> </span>destroy<span class="w"> </span>lab_nha-ubuntu-a2<span class="w">   </span><span class="c1"># yank a node out from under the cluster</span>
 </code></pre></div>
-<p>That node's tile turns red within a scrape interval while Pacemaker refloats the
-QM elsewhere; bring it back (<code>mqlab bootstrap pcmk-ubuntu</code>, which resumes at the
+<p>That node's tile turns red within a scrape interval while the queue manager keeps
+running on the remaining Native HA instances; bring it back (<code>mqlab bootstrap
+nativeha-ubuntu</code>, which resumes at the
 <code>vms</code> phase) and the tile turns green again. That live red↔green flip is the
 point — a fault you can <em>watch</em>.</p>
 

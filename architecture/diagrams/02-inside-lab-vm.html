@@ -26,19 +26,17 @@
 
   <div class="panel">
     <h3>② Network fabric — the libvirt networks</h3>
-    <p class="sub">Per-site data + heartbeat, a cross-site WAN, the inter-business boundary, the SAN nets, and the management plane. Each can be severed to inject faults.</p>
+    <p class="sub">Per-site data + heartbeat, a cross-site WAN, the inter-business boundary, and the management plane. Each can be severed to inject faults.</p>
     <div class="row">
       <div class="box">
         <h4>Data Center A</h4>
         <span class="net net-data">net-data-a · 10.10.1.0/24</span>
         <span class="net net-priv">net-hb-a · 172.16.1.0/24</span>
-        <span class="net net-san">net-san-a · 10.40.1.0/24</span>
       </div>
       <div class="box">
         <h4>Data Center B</h4>
         <span class="net net-data">net-data-b · 10.10.2.0/24</span>
         <span class="net net-priv">net-hb-b · 172.16.2.0/24</span>
-        <span class="net net-san">net-san-b · 10.40.2.0/24</span>
       </div>
       <div class="box b">
         <h4>Cross-site &amp; inter-business</h4>
@@ -55,11 +53,7 @@
 
   <div class="panel">
     <h3>③ Node fleet — guests grouped by stack (3+3 per stack)</h3>
-    <p class="sub">One <code>topology.yaml</code> defines every guest, its platform, and its NICs. Four registered HA/DR stacks, plus the counterparty, the app client, and the observability plane (the Watcher and the optional log-search tier).</p>
-    <div class="group">
-      <div class="glabel">Pacemaker / SAN arm (Ubuntu) — shared-storage HA</div>
-      <div class="nodes"><div class="node">san-a</div><div class="node">pcmk-a1</div><div class="node">pcmk-a2</div><div class="node">pcmk-a3</div><span class="tag bsep">·B·</span><div class="node">san-b</div><div class="node">pcmk-b1</div><div class="node">pcmk-b2</div><div class="node">pcmk-b3</div></div>
-    </div>
+    <p class="sub">One <code>topology.yaml</code> defines every guest, its platform, and its NICs. Three registered HA/DR stacks, plus the counterparty, the app client, and the observability plane (the Watcher and the optional log-search tier).</p>
     <div class="group">
       <div class="glabel">RDQM arm (RHEL) — replicated-storage HA</div>
       <div class="nodes"><div class="node">rdqm-a1</div><div class="node">rdqm-a2</div><div class="node">rdqm-a3</div><span class="tag bsep">·B·</span><div class="node">rdqm-b1</div><div class="node">rdqm-b2</div><div class="node">rdqm-b3</div></div>

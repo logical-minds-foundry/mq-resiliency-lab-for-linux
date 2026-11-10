@@ -1230,7 +1230,7 @@ topologies</strong> end to end — from a bare x86 Linux host down to running qu
 managers and a live message path that survives failover.</p>
 <p>Clone the repository, run <code>./scripts/setup</code>, and bring up a full HA/DR stack with
 a single command:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>pcmk-ubuntu
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>nativeha-ubuntu
 </code></pre></div>
 <p>That one command defines the lab networks, boots the guest fleet, provisions the
 cluster and queue manager, and wires up observability — with every underlying
@@ -1243,14 +1243,14 @@ implementing HA/DR. You bring a virtualization-capable x86 host; the lab brings
 everything else.</p>
 <h2 id="what-you-can-do-here">What you can do here<a class="headerlink" href="#what-you-can-do-here" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Form a 3-node HA group — <strong>RDQM</strong>, <strong>Pacemaker/SAN</strong>, or <strong>Native HA</strong> — with
-  automatic failover, and prove a live message path survives it.</li>
+<li>Form a 3-node HA group — <strong>RDQM</strong> or <strong>Native HA</strong> — with automatic failover,
+  and prove a live message path survives it.</li>
 <li>Drive an asynchronous <strong>DR / CRR</strong> cutover to a matching 3-node group at a
   second site (a full 3+3 stack).</li>
-<li>Compare the three HA mechanisms — replicated-storage (RDQM), shared-SAN
-  (Pacemaker), and log-replicated (Native HA) — on the same network fabric.
-  <strong>Native HA is the strategic choice</strong> for new HA deployments. RDQM and
-  Pacemaker are counter-options the lab keeps for as long as IBM supports them
+<li>Compare the two HA mechanisms — replicated-storage (RDQM) and log-replicated
+  (Native HA, on RHEL and on Ubuntu) — on the same network fabric.
+  <strong>Native HA is the strategic choice</strong> for new HA deployments. RDQM is a
+  counter-option the lab keeps for as long as IBM supports it
   (see <a href="architecture/">Architecture</a>).</li>
 </ul>
 <h2 id="what-it-actually-is">What it actually is<a class="headerlink" href="#what-it-actually-is" title="Permanent link">&para;</a></h2>
