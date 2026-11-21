@@ -78,8 +78,8 @@ Propose the entry and where it belongs first, then wait for the decision.
 ## Worktrees
 
 - Sessions always start at the project root, never inside `.worktrees/`.
-- One worktree per issue: `.worktrees/issue-<N>-<slug>/` on branch
-  `feature/<N>-<slug>`. Remove it once its branch lands.
+- One worktree per issue, `.worktrees/issue-<N>-<slug>/` on `feature/<N>-<slug>`, or per batch,
+  `.worktrees/issue-<N>-batch-<slug>/` on `feature/<N>-batch-<slug>` (`<N>` its first issue). Remove it once its branch lands.
 - The main worktree is read-only, bar ignored `build/` scratch; every edit goes through a worktree.
 - Read, Edit and Write use the worktree's absolute path. Bash commands `cd`
   into the worktree first or use absolute paths.
@@ -94,9 +94,9 @@ run it with `! <command>` in the prompt.
 
 ## Validation
 
-`vrg-container-run -- vrg-validate` is the only validation command. Don't run
-linters, formatters or tests outside it; a tool it doesn't invoke is not part
-of the pipeline.
+- Every linter, formatter and test runs through `vrg-container-run`, never directly on the host.
+- Running one tool ad hoc while working is fine: `vrg-container-run -- markdownlint --fix <file>`, one test file.
+- Work is finished only when a full `vrg-container-run -- vrg-validate` passes; it is the gate before handoff.
 
 ## PR handoff
 
@@ -109,7 +109,7 @@ of the pipeline.
   `vrg-submit-pr` pushes the branch.
 - After report-ready the branch is frozen: no new commits and no push that
   advances it; more work is a new follow-up issue. Re-running report-ready to
-  fix the prose is allowed. `vrg-pr-workflow unfreeze` is the only way to lift it.
+  fix the prose is allowed. Submitting with `vrg-submit-pr` lifts it, as does `vrg-pr-workflow unfreeze`.
 - The report-ready title, summary and notes are public (the relay ref is
   world-readable): never put secrets in them.
 
