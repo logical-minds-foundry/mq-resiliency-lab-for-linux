@@ -4,9 +4,6 @@ versioning-scheme = "none"
 branching-model = "docs-single-branch"
 release-model = "none"
 primary-language = "python"
-# Public repo: GHAS/code-scanning is on. Declared explicitly rather than inferred
-# from visibility, so the CI-gates ruleset posture is unambiguous (#491).
-ghas = true
 
 [ci]
 # Kept pin (#1685): the lab is an unpackaged app, so unpinned it would follow
