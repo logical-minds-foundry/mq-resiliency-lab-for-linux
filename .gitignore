@@ -1,4 +1,4 @@
-# >>> vergil-managed: base + python (managed by vrg-gitignore-sync; do not edit) >>>
+# >>> vergil-managed: base + python (managed by vrg-github-repo-config update; do not edit) >>>
 *.swp
 *.swo
 *~
