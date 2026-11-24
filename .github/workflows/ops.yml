@@ -15,4 +15,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-    secrets: inherit
+    # Not `secrets: inherit`: the reusable workflow is in another org.
+    secrets:
+      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
